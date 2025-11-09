@@ -377,8 +377,9 @@ func isDocumentNavigation(req *http.Request, res *http.Response) bool {
 	// and the request is the result of a user-initiated top-level navigation (e.g. resulting from a user clicking a link).
 	// Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Sec-Fetch-Dest#document
 	// Note: Although not explicitly stated in the spec, Fetch Metadata Request Headers are only included in requests sent to HTTPS endpoints.
-	if req.URL.Scheme == "https" && req.Header.Get("Sec-Fetch-Dest") != "document" {
-		return false
+	if req.URL.Scheme == "https" {
+		secFetchDest := req.Header.Get("Sec-Fetch-Dest")
+		return secFetchDest == "document" || secFetchDest == "iframe"
 	}
 
 	contentType := res.Header.Get("Content-Type")
