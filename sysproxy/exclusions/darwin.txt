@@ -180,5 +180,9 @@ api.config.opr.gg
 autoupdate.opera.com
 download.opera.com
 operacdn.com
+
+# Apple Music app
+amp-api.music.apple.com
+amp-api-edge.music.apple.com
 # </misc>
 

@@ -53,10 +53,11 @@ func (nr *NetworkRules) ParseRule(rawRule string, filterName *string) (isExcepti
 				continue
 			}
 
-			pattern := fmt.Sprintf("||%s^$document", host)
+			pattern := fmt.Sprintf("||%s^", host)
 			nr.primaryStore.Insert(pattern, &rule.Rule{
-				RawRule:    pattern,
+				RawRule:    rawRule,
 				FilterName: filterName,
+				Document:   true,
 			})
 		}
 

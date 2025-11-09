@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/ZenPrivacy/zen-core/networkrules/rule"
 )
@@ -58,17 +57,17 @@ func (nr *NetworkRules) CreateBlockPageResponse(req *http.Request, appliedRules 
 	h := make(http.Header)
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Cache-Control", "no-store")
-	h.Set("Content-Length", strconv.Itoa(buf.Len()))
 
 	return &http.Response{
-		StatusCode: http.StatusOK,
-		Status:     http.StatusText(http.StatusOK),
-		Proto:      req.Proto,
-		ProtoMajor: req.ProtoMajor,
-		ProtoMinor: req.ProtoMinor,
-		Header:     h,
-		Body:       io.NopCloser(&buf),
-		Request:    req,
+		StatusCode:    http.StatusOK,
+		Status:        http.StatusText(http.StatusOK),
+		Proto:         req.Proto,
+		ProtoMajor:    req.ProtoMajor,
+		ProtoMinor:    req.ProtoMinor,
+		Header:        h,
+		ContentLength: int64(buf.Len()),
+		Body:          io.NopCloser(&buf),
+		Request:       req,
 	}, nil
 }
 
