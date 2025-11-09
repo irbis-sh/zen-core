@@ -373,9 +373,7 @@ func (f *Filter) HandleResponse(req *http.Request, res *http.Response) error {
 }
 
 func isDocumentNavigation(req *http.Request, res *http.Response) bool {
-	// Sec-Fetch-Dest: document indicates that the destination is a document (HTML or XML),
-	// and the request is the result of a user-initiated top-level navigation (e.g. resulting from a user clicking a link).
-	// Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Sec-Fetch-Dest#document
+	// Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-Fetch-Dest#directives
 	// Note: Although not explicitly stated in the spec, Fetch Metadata Request Headers are only included in requests sent to HTTPS endpoints.
 	if req.URL.Scheme == "https" {
 		secFetchDest := req.Header.Get("Sec-Fetch-Dest")
