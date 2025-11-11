@@ -377,7 +377,7 @@ func isDocumentNavigation(req *http.Request, res *http.Response) bool {
 	// Note: Although not explicitly stated in the spec, Fetch Metadata Request Headers are only included in requests sent to HTTPS endpoints.
 	if req.URL.Scheme == "https" {
 		secFetchDest := req.Header.Get("Sec-Fetch-Dest")
-		if secFetchDest != "document" && secFetchDest == "iframe" {
+		if secFetchDest != "document" && secFetchDest != "iframe" {
 			return false
 		}
 	}
