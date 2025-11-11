@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	primaryRuleRegex   = regexp.MustCompile(`(.+?)#\?#(.+)`)
-	exceptionRuleRegex = regexp.MustCompile(`(.+?)#@\?#(.+)`)
+	
+	primaryRuleRegex   = regexp.MustCompile(`(.+?)#\??#(.+)`)
+	exceptionRuleRegex = regexp.MustCompile(`(.+?)#@\??#(.+)`)
 
 	//go:embed bundle.js
 	defaultExtendedCSSBundle []byte
