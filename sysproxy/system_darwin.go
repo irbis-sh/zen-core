@@ -1,79 +1,93 @@
 package sysproxy
 
 import (
+	"bytes"
 	_ "embed"
 	"errors"
 	"fmt"
 	"os/exec"
-	"regexp"
 	"strings"
 )
 
 var (
-	reInterfaceName = regexp.MustCompile(`^[\w\d]+$`)
-	networkService  string
 	//go:embed exclusions/darwin.txt
 	platformSpecificExcludedHosts []byte
+
+	// networkServices remembers the services we modified, for unsetSystemProxy.
+	networkServices []string
 )
 
-// setSystemProxy sets the system proxy to the proxy address.
+// setSystemProxy sets the system proxy PAC URL.
 func setSystemProxy(pacURL string) error {
-	cmd := exec.Command("sh", "-c", "scutil --nwi | grep 'Network interfaces' | cut -d ' ' -f 3")
-	out, err := cmd.CombinedOutput()
+	svcs, err := discoverNetworkServices()
 	if err != nil {
-		return fmt.Errorf("get default interface: %v\n%s", err, out)
+		return fmt.Errorf("discover network services: %v", err)
 	}
-	interfaceName := strings.TrimSpace(string(out))
-	if len(interfaceName) == 0 {
-		return errors.New("no default interface found")
-	}
-	if !reInterfaceName.MatchString(interfaceName) {
-		// I am pretty sure that interface names can only contain alphanumeric characters,
-		// but just to be sure not to introduce a shell injection vulnerability, let's check it.
-		return fmt.Errorf("invalid interface name: %s", interfaceName)
-	}
+	networkServices = svcs
 
-	cmd = exec.Command("sh", "-c", fmt.Sprintf("networksetup -listnetworkserviceorder | grep %s -B 1 | head -n 1 | cut -d ' ' -f 2-", interfaceName)) // #nosec G204 -- Interface name is validated above
-	out, err = cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("get network service: %v\n%s", err, out)
-	}
-	networkService = strings.TrimSpace(string(out))
-	if len(networkService) == 0 {
-		return errors.New("no network service found")
-	}
+	for _, svc := range networkServices {
+		cmd := exec.Command("networksetup", "-setwebproxystate", svc, "off")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("unset web proxy for network service %q: %v (%q)", svc, err, out)
+		}
 
-	cmd = exec.Command("networksetup", "-setwebproxystate", networkService, "off")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("unset web proxy for network service %q: %v (%q)", networkService, err, out)
-	}
+		cmd = exec.Command("networksetup", "-setsecurewebproxystate", svc, "off")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("unset secure web proxy for network service %q: %v (%q)", svc, err, out)
+		}
 
-	cmd = exec.Command("networksetup", "-setsecurewebproxystate", networkService, "off")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("unset secure web proxy for network service %q: %v (%q)", networkService, err, out)
+		cmd = exec.Command("networksetup", "-setautoproxyurl", svc, pacURL)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("set autoproxyurl to %q for network service %q: %v (%q)", pacURL, svc, err, out)
+		}
 	}
-
-	cmd = exec.Command("networksetup", "-setautoproxyurl", networkService, pacURL)
-	if out, err = cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("set autoproxyurl to %q for network service %q: %v (%q)", pacURL, networkService, err, out)
-	}
-
-	// There's no need to set autoproxystate to on, as setting the URL already does that.
 
 	return nil
 }
 
 func unsetSystemProxy() error {
-	if networkService == "" {
-		return errors.New("trying to unset system proxy without setting it first")
+	if len(networkServices) == 0 {
+		return nil
 	}
 
-	cmd := exec.Command("networksetup", "-setautoproxystate", networkService, "off")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("set autoproxystate to off for network service %q: %v (%q)", networkService, err, out)
+	for _, svc := range networkServices {
+		cmd := exec.Command("networksetup", "-setautoproxystate", svc, "off")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("set autoproxystate to off for network service %q: %v (%q)", svc, err, out)
+		}
 	}
 
-	networkService = ""
-
+	networkServices = nil
 	return nil
+}
+
+// discoverNetworkServices returns a list of all network service names.
+func discoverNetworkServices() ([]string, error) {
+	cmd := exec.Command("networksetup", "-listallnetworkservices")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("list network services: %v (%q)", err, out)
+	}
+
+	lines := bytes.Split(out, []byte{'\n'})
+	if len(lines) < 2 {
+		return nil, errors.New("no network services found")
+	}
+
+	// The first line contains "An asterisk (*) denotes that a network service is disabled."
+	services := make([]string, 0, len(lines)-1)
+	for _, raw := range lines[1:] {
+		line := strings.TrimSpace(string(raw))
+		if line == "" {
+			continue
+		}
+		if line[0] == '*' {
+			// Disabled service; remove the asterisk.
+			line = strings.TrimSpace(line[1:])
+		}
+
+		services = append(services, line)
+	}
+
+	return services, nil
 }
