@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/hashicorp/go-multierror"
 )
 
 var (
@@ -50,15 +52,16 @@ func unsetSystemProxy() error {
 		return nil
 	}
 
+	var result error
 	for _, svc := range networkServices {
 		cmd := exec.Command("networksetup", "-setautoproxystate", svc, "off")
 		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("set autoproxystate to off for network service %q: %v (%q)", svc, err, out)
+			result = multierror.Append(result, fmt.Errorf("set autoproxystate to off for network service %q: %v (%q)", svc, err, out))
 		}
 	}
 
 	networkServices = nil
-	return nil
+	return result
 }
 
 // discoverNetworkServices returns a list of all network service names.
