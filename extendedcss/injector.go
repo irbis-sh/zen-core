@@ -18,7 +18,6 @@ import (
 )
 
 var (
-	
 	primaryRuleRegex   = regexp.MustCompile(`(.+?)#\??#(.+)`)
 	exceptionRuleRegex = regexp.MustCompile(`(.+?)#@\??#(.+)`)
 
