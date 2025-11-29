@@ -45,9 +45,7 @@ import (
 
 func getNSSInfo() (hasNSS bool, hasCertutil bool, certutilPath string) {
 	allPaths := append(append([]string{}, getNssDbs()...), getFirefoxPaths()...)
-	hasNSS = slices.ContainsFunc(allPaths, func(p string) bool {
-		return pathExists(p)
-	})
+	hasNSS = slices.ContainsFunc(allPaths, pathExists)
 
 	switch runtime.GOOS {
 	case "darwin":
@@ -82,16 +80,14 @@ func (cs *DiskCertStore) checkNSS() bool {
 	}
 
 	success := true
-	if cs.forEachNSSProfile(func(profile string) {
+	profileCount := cs.forEachNSSProfile(func(profile string) {
 		err := exec.Command(certutilpath, "-V", "-d", profile, "-u", "L", "-n", certCommonName).Run()
 		if err != nil {
 			success = false
 		}
-	}) == 0 {
-		success = false
-	}
+	})
 
-	return success
+	return profileCount > 0 && success
 }
 
 func (cs *DiskCertStore) installNSS() error {
@@ -133,7 +129,7 @@ func (cs *DiskCertStore) uninstallNSS() error {
 			log.Printf("failed to uninstall cert from %s: %v\n%s\n", profile, err, out)
 		}
 	}) == 0 {
-		return fmt.Errorf("No %s security databases found", NSSBrowsers)
+		return fmt.Errorf("no %s security databases found", NSSBrowsers)
 	}
 	return nil
 }
@@ -199,7 +195,7 @@ func execCertutil(cmd *exec.Cmd) ([]byte, error) {
 	out, err := cmd.CombinedOutput()
 	if err != nil && bytes.Contains(out, []byte("SEC_ERROR_READ_ONLY")) && runtime.GOOS != "windows" {
 		origArgs := cmd.Args[1:]
-		cmd = exec.Command("pkexec", cmd.Path)
+		cmd = exec.Command("pkexec", cmd.Path) // #nosec G204
 		cmd.Args = append(cmd.Args, origArgs...)
 		out, err = cmd.CombinedOutput()
 	}
