@@ -43,9 +43,9 @@ import (
 )
 
 var (
-	FirefoxProfiles = []string{os.Getenv("HOME") + "/Library/Application Support/Firefox/Profiles/*"}
+	FirefoxProfiles     = []string{os.Getenv("HOME") + "/Library/Application Support/Firefox/Profiles/*"}
 	CertutilInstallHelp = "install nss through brew"
-	NSSBrowsers     = "Firefox"
+	NSSBrowsers         = "Firefox"
 )
 
 // caFolderName defines the name of the folder where the root CA certificate and key are stored.
