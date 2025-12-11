@@ -136,29 +136,37 @@ func (t *Tree[T]) Get(url string) []T {
 		}
 	}
 
-	addUnique(t.root.traverse(url))
 	addUnique(t.anchorRoot.traverse(url))
+	addUnique(t.root.traverse(url))
 
-	inScheme := true
-	inHost := false
-	for i, c := range url {
-		addUnique(t.root.traverse(url[i:]))
+	var (
+		inScheme     = true
+		inHost       = false
+		traverseNext = false
+	)
+	for i := 1; i < len(url); i++ {
+		c := url[i]
 
-		if inHost {
-			if c == '.' {
-				addUnique(t.domainBoundaryRoot.traverse(url[i+1:]))
-			}
-
-			if c == '/' {
-				inHost = false
-			}
+		if traverseNext {
+			addUnique(t.root.traverse(url[i:]))
+			traverseNext = isTraversalMarker(c)
+		} else if isTraversalMarker(c) {
+			addUnique(t.root.traverse(url[i:]))
+			traverseNext = true
 		}
 
-		if inScheme {
-			if strings.HasSuffix(url[:i+1], "://") {
-				addUnique(t.domainBoundaryRoot.traverse(url[i+1:]))
-				inScheme = false
-				inHost = true
+		if inScheme && strings.HasSuffix(url[:i], "://") {
+			addUnique(t.domainBoundaryRoot.traverse(url[i:]))
+			inScheme = false
+			inHost = true
+		} else if inHost {
+			switch c {
+			case '.':
+				if i+1 < len(url) {
+					addUnique(t.domainBoundaryRoot.traverse(url[i+1:]))
+				}
+			case '/', '?':
+				inHost = false
 			}
 		}
 	}
@@ -184,4 +192,16 @@ func longestPrefix(a, b []token) int {
 		}
 	}
 	return maxLen
+}
+
+var traversalMarkers [256]bool
+
+func init() {
+	for _, ch := range "-._~:/?#[]@!$&'()*+,;%=" {
+		separators[ch] = true
+	}
+}
+
+func isTraversalMarker(char byte) bool {
+	return separators[char]
 }
