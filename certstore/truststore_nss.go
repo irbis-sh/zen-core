@@ -118,7 +118,12 @@ func (cs *DiskCertStore) installNSS() error {
 }
 
 func (cs *DiskCertStore) uninstallNSS() error {
-	_, _, certutilPath := getNSSInfo()
+	_, hasCertutil, certutilPath := getNSSInfo()
+
+	if !hasCertutil {
+		return errors.New("no certutil found")
+	}
+
 	if cs.forEachNSSProfile(func(profile string) {
 		err := exec.Command(certutilPath, "-V", "-d", profile, "-u", "L", "-n", certCommonName).Run()
 		if err != nil {
