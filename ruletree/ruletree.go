@@ -194,14 +194,15 @@ func longestPrefix(a, b []token) int {
 	return maxLen
 }
 
+// traversalMarkers indicate traversal starting points in a URL.
 var traversalMarkers [256]bool
 
 func init() {
 	for _, ch := range "-._~:/?#[]@!$&'()*+,;%=" {
-		separators[ch] = true
+		traversalMarkers[ch] = true
 	}
 }
 
 func isTraversalMarker(char byte) bool {
-	return separators[char]
+	return traversalMarkers[char]
 }
