@@ -47,11 +47,7 @@ import (
 // It is capitalized to follow the general convention of using capitalized folder names on Windows.
 const caFolderName = "Certs"
 
-var (
-	FirefoxProfiles     = []string{os.Getenv("USERPROFILE") + "\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles"}
-	CertutilInstallHelp = "" // certutil unsupported on windows
-	NSSBrowsers         = "Firefox"
-)
+var firefoxProfiles = []string{os.Getenv("USERPROFILE") + "\\AppData\\Roaming\\Mozilla\\Firefox\\Profiles"}
 
 var (
 	modcrypt32                           = syscall.NewLazyDLL("crypt32.dll")

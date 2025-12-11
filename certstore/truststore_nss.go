@@ -33,6 +33,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -97,21 +98,21 @@ func (cs *DiskCertStore) installNSS() error {
 	}
 
 	if !hasCertutil {
-		return fmt.Errorf("no certutil found: %s", CertutilInstallHelp)
+		return errors.New("no certutil found")
 	}
 
 	if cs.forEachNSSProfile(func(profile string) {
 		cmd := exec.Command(certutilPath, "-A", "-d", profile, "-t", "C,,", "-n", certCommonName, "-i", cs.certPath)
 		out, err := execCertutil(cmd)
 		if err != nil {
-			log.Printf("failed to install cert in %s: %v \n%s \n", profile, err, out)
+			log.Printf("failed to install cert in %s: %v (%q)", profile, err, out)
 		}
 	}) == 0 {
-		return fmt.Errorf("no %s security databases found", NSSBrowsers)
+		return errors.New("no security databases found")
 	}
 
 	if !cs.checkNSS() {
-		return fmt.Errorf("failed to install NSS, profiles for %s have not been created", NSSBrowsers)
+		return errors.New("failed to install NSS, profiles have not been created")
 	}
 	return nil
 }
@@ -126,17 +127,17 @@ func (cs *DiskCertStore) uninstallNSS() error {
 		cmd := exec.Command(certutilPath, "-D", "-d", profile, "-n", certCommonName)
 		out, err := execCertutil(cmd)
 		if err != nil {
-			log.Printf("failed to uninstall cert from %s: %v\n%s\n", profile, err, out)
+			log.Printf("failed to uninstall cert from %s: %v (%q)", profile, err, out)
 		}
 	}) == 0 {
-		return fmt.Errorf("no %s security databases found", NSSBrowsers)
+		return errors.New("no security databases found")
 	}
 	return nil
 }
 
 func (cs *DiskCertStore) forEachNSSProfile(f func(profile string)) (found int) {
 	profiles := getNssDbs()
-	for _, ff := range FirefoxProfiles {
+	for _, ff := range firefoxProfiles {
 		matches, err := filepath.Glob(ff)
 		if err == nil {
 			profiles = append(profiles, matches...)
@@ -193,7 +194,7 @@ func getNssDbs() []string {
 // the command with "pkexec" to work around file permissions.
 func execCertutil(cmd *exec.Cmd) ([]byte, error) {
 	out, err := cmd.CombinedOutput()
-	if err != nil && bytes.Contains(out, []byte("SEC_ERROR_READ_ONLY")) && runtime.GOOS != "windows" {
+	if err != nil && bytes.Contains(out, []byte("SEC_ERROR_READ_ONLY")) && runtime.GOOS == "linux" {
 		origArgs := cmd.Args[1:]
 		cmd = exec.Command("pkexec", cmd.Path) // #nosec G204
 		cmd.Args = append(cmd.Args, origArgs...)

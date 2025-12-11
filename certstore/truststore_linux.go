@@ -39,12 +39,8 @@ import (
 	"os/exec"
 )
 
-var (
-	FirefoxProfiles = []string{os.Getenv("HOME") + "/.mozilla/firefox/*",
-		os.Getenv("HOME") + "/snap/firefox/common/.mozilla/firefox/*"}
-	CertutilInstallHelp = "install nss through your package manager"
-	NSSBrowsers         = "Firefox and/or Chromium"
-)
+var firefoxProfiles = []string{os.Getenv("HOME") + "/.mozilla/firefox/*",
+	os.Getenv("HOME") + "/snap/firefox/common/.mozilla/firefox/*"}
 
 const (
 	// caFolderName defines the name of the folder where the root CA certificate and key are stored.

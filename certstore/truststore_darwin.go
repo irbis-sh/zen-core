@@ -42,11 +42,7 @@ import (
 	"howett.net/plist"
 )
 
-var (
-	FirefoxProfiles     = []string{os.Getenv("HOME") + "/Library/Application Support/Firefox/Profiles/*"}
-	CertutilInstallHelp = "install nss through brew"
-	NSSBrowsers         = "Firefox"
-)
+var firefoxProfiles = []string{os.Getenv("HOME") + "/Library/Application Support/Firefox/Profiles/*"}
 
 // caFolderName defines the name of the folder where the root CA certificate and key are stored.
 // It is capitalized to follow the general convention of using capitalized folder names on macOS.
