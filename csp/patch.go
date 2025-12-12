@@ -1,6 +1,7 @@
 package csp
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ZenPrivacy/zen-core/httprewrite"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 const (
@@ -126,89 +128,70 @@ func patchMetaCSPs(res *http.Response, nonce string, kind inlineKind) (bool, err
 		return false, nil
 	}
 
+	var changed bool
+
 	err := httprewrite.StreamRewrite(res, func(src io.ReadCloser, dst *io.PipeWriter) {
 		defer src.Close()
 
 		z := html.NewTokenizer(src)
-		var foundBody bool
-	loop:
 		for {
 			tt := z.Next()
 			switch tt {
 			case html.ErrorToken:
 				dst.CloseWithError(z.Err())
 				return
+
 			case html.StartTagToken, html.SelfClosingTagToken:
-				raw := append([]byte(nil), z.Raw()...)
 				tok := z.Token()
+				if tok.DataAtom != atom.Meta {
+					dst.Write(z.Raw())
+					continue
+				}
 
-				if strings.EqualFold(tok.Data, "meta") {
-					httpEquiv := ""
-					contentIdx := -1
-					for i, attr := range tok.Attr {
-						switch strings.ToLower(attr.Key) {
-						case "http-equiv":
-							httpEquiv = attr.Val
-						case "content":
-							contentIdx = i
-						}
+				var hasCSP bool
+				var contentVal string
+
+				for _, a := range tok.Attr {
+					if strings.EqualFold(a.Key, "http-equiv") &&
+						strings.EqualFold(a.Val, "content-security-policy") {
+						hasCSP = true
 					}
 
-					if strings.EqualFold(httpEquiv, "content-security-policy") && contentIdx >= 0 {
-						patchedPolicies, changed := patchPolicies([]string{tok.Attr[contentIdx].Val}, nonce, kind)
-						if changed {
-							tok.Attr[contentIdx].Val = patchedPolicies[0]
-							if _, err := dst.Write([]byte(tok.String())); err != nil {
-								dst.CloseWithError(err)
-								return
-							}
-							continue
-						}
+					if strings.EqualFold(a.Key, "content") {
+						contentVal = a.Val
 					}
 				}
 
-				if _, err := dst.Write(raw); err != nil {
-					dst.CloseWithError(err)
-					return
+				if !hasCSP {
+					dst.Write(z.Raw())
+					continue
 				}
-				if tt == html.StartTagToken && strings.EqualFold(tok.Data, "body") {
-					foundBody = true
-					break loop
+				if contentVal == "" {
+					dst.Write(z.Raw())
+					continue
 				}
-			case html.EndTagToken:
-				raw := z.Raw()
-				if _, err := dst.Write(raw); err != nil {
-					dst.CloseWithError(err)
-					return
+
+				patched, ok := patchPolicies([]string{contentVal}, nonce, kind)
+				if !ok {
+					dst.Write(z.Raw())
+					continue
 				}
-				tok := z.Token()
-				// The head is over, no more meta tags.
-				if strings.EqualFold(tok.Data, "head") {
-					foundBody = true
-					break loop
-				}
+
+				fullTag := collectFullTag(z)
+				newContent := patched[0]
+				patchedRaw := replaceContentValue(fullTag, newContent)
+				dst.Write(patchedRaw)
+
+				changed = true
+				continue
+
 			default:
-				if _, err := dst.Write(z.Raw()); err != nil {
-					dst.CloseWithError(err)
-					return
-				}
+				dst.Write(z.Raw())
 			}
 		}
-
-		if foundBody {
-			if _, err := io.Copy(dst, src); err != nil {
-				dst.CloseWithError(err)
-				return
-			}
-		}
-
-		dst.Close()
 	})
-	if err != nil {
-		return false, err
-	}
 
-	return true, nil
+	return changed, err
 }
 
 // cutDirective splits "name [value...]" -> (lowercased name, value without leading and trailing whitespace).
@@ -293,4 +276,48 @@ func directivePriority(kind inlineKind, name string) int {
 		}
 	}
 	return 0
+}
+
+func collectFullTag(z *html.Tokenizer) []byte {
+	buf := append([]byte{}, z.Raw()...)
+
+	for {
+		tt := z.Next()
+		if tt == html.ErrorToken {
+			break
+		}
+
+		part := z.Raw()
+		buf = append(buf, part...)
+
+		if bytes.Contains(part, []byte(">")) {
+			break
+		}
+	}
+
+	return buf
+}
+
+func replaceContentValue(raw []byte, newVal string) []byte {
+	s := string(raw)
+
+	i := strings.Index(s, "content=")
+	if i == -1 {
+		return raw
+	}
+
+	quote := s[i+8] // char after content=
+	if quote != '"' && quote != '\'' {
+		return raw
+	}
+
+	start := i + 9 // beginning of value
+	endRel := strings.IndexByte(s[start:], quote)
+	if endRel == -1 {
+		return raw // malformed tag
+	}
+
+	end := start + endRel // end of old value
+
+	return []byte(s[:start] + newVal + s[end:])
 }
