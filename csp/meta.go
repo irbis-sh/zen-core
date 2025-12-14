@@ -11,6 +11,7 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
+// patchMetaCSPs mutates HTML <meta> tags that define Content-Security-Policy.
 func patchMetaCSPs(res *http.Response, nonce string, kind inlineKind) error {
 	if res.Body == nil || res.Body == http.NoBody {
 		return nil
