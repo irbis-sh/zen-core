@@ -41,7 +41,7 @@ func PatchHeaders(res *http.Response, kind inlineKind) (string, error) {
 	return nonce, nil
 }
 
-func patchOneHeader(h http.Header, key, nonce string, kind inlineKind) (patched bool) {
+func patchOneHeader(h http.Header, key, nonce string, kind inlineKind) {
 	lines := h.Values(key)
 	if len(lines) == 0 {
 		return
@@ -54,8 +54,6 @@ func patchOneHeader(h http.Header, key, nonce string, kind inlineKind) (patched 
 			h.Add(key, strings.TrimSpace(strings.Trim(v, " ;")))
 		}
 	}
-
-	return changed
 }
 
 func patchPolicies(policies []string, nonce string, kind inlineKind) ([]string, bool) {
