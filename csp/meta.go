@@ -75,14 +75,14 @@ func patchMetaCSPs(res *http.Response, nonce string, kind inlineKind) error {
 }
 
 func replaceContentValue(raw []byte, newVal string) []byte {
-	const key = "content="
+	lower := bytes.ToLower(raw)
+	i := bytes.Index(lower, []byte("content="))
 
-	i := bytes.Index(raw, []byte(key))
 	if i == -1 {
 		return raw
 	}
 
-	afterKey := raw[i+len(key):]
+	afterKey := raw[i+len("content="):]
 	if len(afterKey) == 0 {
 		return raw
 	}
@@ -92,7 +92,7 @@ func replaceContentValue(raw []byte, newVal string) []byte {
 		return raw
 	}
 
-	valueStart := i + len(key) + 1
+	valueStart := i + len("content=") + 1
 	valueEndRel := bytes.IndexByte(raw[valueStart:], quote)
 	if valueEndRel == -1 {
 		return raw
