@@ -17,8 +17,6 @@ import (
 var (
 	//go:embed bundle.js
 	defaultScriptletsBundle []byte
-	scriptOpeningTag        = []byte("<script>")
-	scriptClosingTag        = []byte("</script>")
 )
 
 type store interface {
@@ -72,11 +70,9 @@ func (inj *Injector) Inject(req *http.Request, res *http.Response) error {
 	}
 
 	var injection bytes.Buffer
-	if nonce == "" {
-		injection.Write(scriptOpeningTag)
-	} else {
-		fmt.Fprintf(&injection, `<script nonce="%s">`, nonce)
-	}
+	injection.WriteString(`<script nonce="`)
+	injection.WriteString(nonce)
+	injection.WriteString(`">`)
 	injection.Write(inj.bundle)
 	injection.WriteString("(()=>{")
 	for _, argLst := range argLists {
@@ -84,8 +80,7 @@ func (inj *Injector) Inject(req *http.Request, res *http.Response) error {
 			return fmt.Errorf("generate injection for scriptlet %q: %v", argLst, err)
 		}
 	}
-	injection.WriteString("})();")
-	injection.Write(scriptClosingTag)
+	injection.WriteString("})();</script>")
 
 	// Appending the scriptlets bundle to the head of the document aligns with the behavior of uBlock Origin:
 	// - https://github.com/gorhill/uBlock/blob/d7ae3a185eddeae0f12d07149c1f0ddd11fd0c47/platform/firefox/vapi-background-ext.js#L373-L375
