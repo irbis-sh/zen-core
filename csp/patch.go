@@ -21,8 +21,8 @@ const (
 )
 
 // PatchHeaders mutates CSP headers and meta tags so an inline <script> or <style>
-// element can run. Returns the nonce to place on the inline tag. Returns "" if
-// neither headers required patching nor a CSP meta tag rewrite was scheduled.
+// element can run. Returns the nonce to place on the inline tag.
+// The nonce is safe to inject unconditionally.
 func PatchHeaders(res *http.Response, kind inlineKind) (string, error) {
 	if res == nil {
 		return "", nil
