@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ZenPrivacy/zen-core/internal/ruletree"
 	"github.com/ZenPrivacy/zen-core/networkrules/exceptionrule"
 	"github.com/ZenPrivacy/zen-core/networkrules/rule"
-	"github.com/ZenPrivacy/zen-core/ruletree"
 )
 
 var (

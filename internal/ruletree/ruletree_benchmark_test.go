@@ -35,7 +35,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ZenPrivacy/zen-core/ruletree"
+	"github.com/ZenPrivacy/zen-core/internal/ruletree"
 )
 
 const baseSeed = 42
