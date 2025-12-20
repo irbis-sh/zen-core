@@ -195,14 +195,16 @@ func longestPrefix(a, b []token) int {
 }
 
 // traversalMarkers indicate traversal starting points in a URL.
-var traversalMarkers [256]bool
+var traversalMarkers byteset.Set
 
 func init() {
-	for _, ch := range "-._~:/?#[]@!$&'()*+,;%=" {
-		traversalMarkers[ch] = true
+	const markerChars = "-._~:/?#[]@!$&'()*+,;%="
+	for i := range markerChars {
+		ch := markerChars[i]
+		traversalMarkers.Add(ch)
 	}
 }
 
 func isTraversalMarker(char byte) bool {
-	return traversalMarkers[char]
+	return traversalMarkers.Has(char)
 }

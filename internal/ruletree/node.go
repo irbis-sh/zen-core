@@ -145,14 +145,16 @@ func (n *node[T]) traverse(url string) []T {
 	return data
 }
 
-var separators [256]bool
+var separators byteset.Set
 
 func init() {
-	for _, ch := range "~:/?#[]@!$&'()*+,;=" {
-		separators[ch] = true
+	const sepChars = "~:/?#[]@!$&'()*+,;="
+	for i := range sepChars {
+		ch := sepChars[i]
+		separators.Add(ch)
 	}
 }
 
 func isSeparator(char byte) bool {
-	return separators[char]
+	return separators.Has(char)
 }
