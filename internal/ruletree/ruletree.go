@@ -3,6 +3,8 @@ package ruletree
 import (
 	"strings"
 	"sync"
+
+	"github.com/ZenPrivacy/zen-core/internal/ruletree/byteset"
 )
 
 type Data comparable
@@ -60,11 +62,9 @@ func (t *Tree[T]) Insert(pattern string, v T) {
 	for {
 		if len(tokens) == 0 {
 			if n.isLeaf() {
-				n.leaf.val = append(n.leaf.val, v)
+				n.leaf = append(n.leaf, v)
 			} else {
-				n.leaf = &leaf[T]{
-					val: []T{v},
-				}
+				n.leaf = []T{v}
 			}
 			return
 		}
@@ -75,9 +75,7 @@ func (t *Tree[T]) Insert(pattern string, v T) {
 		if n == nil {
 			n := &node[T]{
 				prefix: tokens,
-				leaf: &leaf[T]{
-					val: []T{v},
-				},
+				leaf:   []T{v},
 			}
 			parent.addEdge(edge[T]{
 				label: tokens[0],
@@ -103,9 +101,7 @@ func (t *Tree[T]) Insert(pattern string, v T) {
 		})
 		n.prefix = n.prefix[commonPrefix:]
 
-		l := &leaf[T]{
-			val: []T{v},
-		}
+		l := []T{v}
 		if commonPrefix == len(tokens) {
 			child.leaf = l
 		} else {

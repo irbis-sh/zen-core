@@ -17,8 +17,8 @@ func (t *Tree[T]) Compact() {
 		n := stack[len(stack)-1]
 		stack = stack[:len(stack)-1]
 
-		if l := n.leaf; l != nil {
-			l.val = trimSlice(l.val)
+		if n.isLeaf() {
+			n.leaf = trimSlice(n.leaf)
 		}
 
 		n.edges = trimSlice(n.edges)

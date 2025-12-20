@@ -2,11 +2,9 @@ package ruletree
 
 import (
 	"sort"
-)
 
-type leaf[T Data] struct {
-	val []T
-}
+	"github.com/ZenPrivacy/zen-core/internal/ruletree/byteset"
+)
 
 type edge[T Data] struct {
 	label token
@@ -15,7 +13,7 @@ type edge[T Data] struct {
 
 type node[T Data] struct {
 	// leaf stores a possible leaf.
-	leaf *leaf[T]
+	leaf []T
 
 	// prefix is the common prefix.
 	prefix []token
@@ -63,10 +61,10 @@ func (n *node[T]) traverse(url string) []T {
 
 	if len(url) == 0 {
 		if re := n.getEdge(tokenAnchor); re != nil && re.isLeaf() {
-			data = append(data, re.leaf.val...)
+			data = append(data, re.leaf...)
 		}
 		if sep != nil && sep.isLeaf() {
-			data = append(data, sep.leaf.val...)
+			data = append(data, sep.leaf...)
 		}
 		return data
 	}
@@ -77,7 +75,7 @@ func (n *node[T]) traverse(url string) []T {
 	traversePrefix = func(prefix []token, url string) {
 		if len(prefix) == 0 {
 			if n.isLeaf() {
-				data = append(data, n.leaf.val...)
+				data = append(data, n.leaf...)
 			}
 			if url != "" {
 				firstCh := url[0]
@@ -95,7 +93,7 @@ func (n *node[T]) traverse(url string) []T {
 		}
 		if len(url) == 0 {
 			if n.isLeaf() && len(prefix) == 1 && (prefix[0] == tokenAnchor || prefix[0] == tokenSeparator || prefix[0] == tokenWildcard) {
-				data = append(data, n.leaf.val...)
+				data = append(data, n.leaf...)
 			}
 			return
 		}
