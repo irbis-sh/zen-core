@@ -33,6 +33,7 @@ import (
 	"math/rand"
 	"net/url"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/ZenPrivacy/zen-core/internal/ruletree"
@@ -58,6 +59,13 @@ func BenchmarkLoadTree(b *testing.B) {
 	}
 	b.SetBytes(totalBytes)
 
+	// Measure total allocated bytes during the timed portion of the benchmark.
+	runtime.GC()
+	var before runtime.MemStats
+	runtime.ReadMemStats(&before)
+
+	var lines int
+	var trees []*ruletree.Tree[string]
 	for b.Loop() {
 		tree := ruletree.New[string]()
 		for _, data := range rawLists {
@@ -70,13 +78,24 @@ func BenchmarkLoadTree(b *testing.B) {
 				}
 
 				tree.Insert(line, line)
+				lines++
 			}
 
 			if err := scanner.Err(); err != nil {
 				b.Fatalf("scan: %v", err)
 			}
 		}
+		trees = append(trees, tree)
 	}
+
+	runtime.GC()
+	var after runtime.MemStats
+	runtime.ReadMemStats(&after)
+	runtime.KeepAlive(trees)
+
+	heapAlloc := float64(after.HeapInuse - before.HeapInuse)
+	b.ReportMetric(heapAlloc/(1024*1024), "MB_allocs")
+	b.ReportMetric(heapAlloc/float64(lines), "B_allocs/line")
 
 	b.ReportAllocs()
 }
