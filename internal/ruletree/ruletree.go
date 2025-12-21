@@ -136,9 +136,11 @@ func (t *Tree[T]) Get(url string) []T {
 	addUnique(t.root.traverse(url))
 
 	var (
-		inScheme     = true
-		inHost       = false
 		traverseNext = false
+
+		schemeEnd = strings.Index(url, "://")
+		hostStart = schemeEnd + 3
+		hostEnd   = strings.IndexAny(url[hostStart:], "/?")
 	)
 	for i := 1; i < len(url); i++ {
 		c := url[i]
@@ -151,18 +153,12 @@ func (t *Tree[T]) Get(url string) []T {
 			traverseNext = true
 		}
 
-		if inScheme && strings.HasSuffix(url[:i], "://") {
+		if i == hostStart {
 			addUnique(t.domainBoundaryRoot.traverse(url[i:]))
-			inScheme = false
-			inHost = true
-		} else if inHost {
-			switch c {
-			case '.':
-				if i+1 < len(url) {
-					addUnique(t.domainBoundaryRoot.traverse(url[i+1:]))
-				}
-			case '/', '?':
-				inHost = false
+		}
+		if i > hostStart && (hostEnd == -1 || i < hostStart+hostEnd) {
+			if c == '.' {
+				addUnique(t.domainBoundaryRoot.traverse(url[i+1:]))
 			}
 		}
 	}
