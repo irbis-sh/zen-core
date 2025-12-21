@@ -59,7 +59,6 @@ func BenchmarkLoadTree(b *testing.B) {
 	}
 	b.SetBytes(totalBytes)
 
-	// Measure total allocated bytes during the timed portion of the benchmark.
 	runtime.GC()
 	var before runtime.MemStats
 	runtime.ReadMemStats(&before)
