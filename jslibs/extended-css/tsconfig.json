@@ -12,7 +12,7 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "Bundler",
     "module": "Preserve",
-    "outDir": "./build",
+    "outDir": "./dist",
     "rootDir": "./src"
   },
   "include": ["src/**/*.ts"]
