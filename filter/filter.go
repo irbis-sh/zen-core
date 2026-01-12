@@ -2,7 +2,6 @@ package filter
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
-	"sync"
 
 	"github.com/ZenPrivacy/zen-core/cosmetic"
 	"github.com/ZenPrivacy/zen-core/cssrule"
@@ -65,10 +63,6 @@ type extendedCSSInjector interface {
 	Inject(*http.Request, *http.Response) error
 }
 
-type filterListStore interface {
-	Get(url string) (io.ReadCloser, error)
-}
-
 type whitelistSrv interface {
 	GetPort() int
 }
@@ -78,39 +72,6 @@ type ListType string
 const (
 	ListTypeCustom ListType = "custom"
 )
-
-type List struct {
-	Name    string   `json:"name"`
-	Type    ListType `json:"type"`
-	URL     string   `json:"url"`
-	Enabled bool     `json:"enabled"`
-	Trusted bool     `json:"trusted"`
-	Locales []string `json:"locales"`
-}
-
-func (f *List) UnmarshalJSON(data []byte) error {
-	type TempFilterList List
-	var temp TempFilterList
-
-	if err := json.Unmarshal(data, &temp); err != nil {
-		return err
-	}
-
-	if temp.Name == "" {
-		return errors.New("name is required")
-	}
-
-	if temp.URL == "" {
-		return errors.New("URL is required")
-	}
-
-	if temp.Type == "" {
-		return errors.New("type is required")
-	}
-
-	*f = List(temp)
-	return nil
-}
 
 // Filter is capable of parsing Adblock-style filter lists and hosts rules and matching URLs against them.
 //
@@ -123,11 +84,7 @@ type Filter struct {
 	jsRuleInjector        jsRuleInjector
 	extendedCSSInjector   extendedCSSInjector
 	eventsEmitter         filterEventsEmitter
-	filterListStore       filterListStore
 	whitelistSrv          whitelistSrv
-
-	filterLists []List
-	myRules     []string
 }
 
 var (
@@ -136,7 +93,7 @@ var (
 )
 
 // NewFilter creates and initializes a new filter.
-func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector, cosmeticRulesInjector cosmeticRulesInjector, cssRulesInjector cssRulesInjector, jsRuleInjector jsRuleInjector, extendedCSSInjector extendedCSSInjector, eventsEmitter filterEventsEmitter, filterListStore filterListStore, whitelistSrv whitelistSrv, filterLists []List, myRules []string) (*Filter, error) {
+func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector, cosmeticRulesInjector cosmeticRulesInjector, cssRulesInjector cssRulesInjector, jsRuleInjector jsRuleInjector, extendedCSSInjector extendedCSSInjector, eventsEmitter filterEventsEmitter, whitelistSrv whitelistSrv) (*Filter, error) {
 	if eventsEmitter == nil {
 		return nil, errors.New("eventsEmitter is nil")
 	}
@@ -158,9 +115,6 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 	if extendedCSSInjector == nil {
 		return nil, errors.New("extendedCSSInjector is nil")
 	}
-	if filterListStore == nil {
-		return nil, errors.New("filterListStore is nil")
-	}
 	if whitelistSrv == nil {
 		return nil, errors.New("whitelistSrv is nil")
 	}
@@ -173,68 +127,16 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 		jsRuleInjector:        jsRuleInjector,
 		extendedCSSInjector:   extendedCSSInjector,
 		eventsEmitter:         eventsEmitter,
-		filterListStore:       filterListStore,
 		whitelistSrv:          whitelistSrv,
-		filterLists:           filterLists,
-		myRules:               myRules,
 	}
-	f.init()
 
 	return f, nil
 }
 
-// init initializes the filter by downloading and parsing the filter lists.
-func (f *Filter) init() {
-	var wg sync.WaitGroup
-	for _, filterList := range f.filterLists {
-		if !filterList.Enabled {
-			continue
-		}
-		wg.Add(1)
-		go func(filterList List) {
-			defer wg.Done()
-
-			contents, err := f.filterListStore.Get(filterList.URL)
-			if err != nil {
-				log.Printf("failed to get filter list %q from store: %v", filterList.URL, err)
-				return
-			}
-			rules, exceptions := f.ParseAndAddRules(contents, &filterList.Name, filterList.Trusted)
-			if err := contents.Close(); err != nil {
-				log.Printf("failed to close filter list: %v", err)
-			}
-
-			log.Printf("filter initialization: added %d rules and %d exceptions from %q", rules, exceptions, filterList.URL)
-		}(filterList)
-	}
-	wg.Wait()
-
-	filterName := "My rules"
-
+// AddList parses the rules from the given reader and adds them to the filter.
+func (f *Filter) AddList(name string, trusted bool, rules io.Reader) error {
 	var ruleCount, exceptionCount int
-	for _, rule := range f.myRules {
-		isException, err := f.AddRule(rule, &filterName, true)
-		if err != nil {
-			log.Printf("failed to add rule from %q: %v", filterName, err)
-			continue
-		}
-		if isException {
-			exceptionCount++
-		} else {
-			ruleCount++
-		}
-	}
-
-	if len(f.myRules) > 0 {
-		log.Printf("filter initialization: added %d rules and %d exceptions from %q", ruleCount, exceptionCount, filterName)
-	}
-
-	f.networkRules.Compact()
-}
-
-// ParseAndAddRules parses the rules from the given reader and adds them to the filter.
-func (f *Filter) ParseAndAddRules(reader io.Reader, filterListName *string, filterListTrusted bool) (ruleCount, exceptionCount int) {
-	scanner := bufio.NewScanner(reader)
+	scanner := bufio.NewScanner(rules)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -242,7 +144,7 @@ func (f *Filter) ParseAndAddRules(reader io.Reader, filterListName *string, filt
 			continue
 		}
 
-		if isException, err := f.AddRule(line, filterListName, filterListTrusted); err != nil { // nolint:revive
+		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
 		} else if isException {
 			exceptionCount++
@@ -251,14 +153,15 @@ func (f *Filter) ParseAndAddRules(reader io.Reader, filterListName *string, filt
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		log.Printf("error reading rules: %v", err)
+		return err
 	}
 
-	return ruleCount, exceptionCount
+	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, name)
+	return nil
 }
 
-// AddRule adds a new rule to the filter. It returns true if the rule is an exception, false otherwise.
-func (f *Filter) AddRule(rule string, filterListName *string, filterListTrusted bool) (isException bool, err error) {
+// addRule adds a new rule to the filter.
+func (f *Filter) addRule(rule string, filterListName *string, filterListTrusted bool) (isException bool, err error) {
 	/*
 		The order of operations here is critical:
 			- jsRule.RuleRegex matches a superset of scriptlet.RuleRegex.
