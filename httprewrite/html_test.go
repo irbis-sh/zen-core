@@ -20,26 +20,27 @@ func TestAppendHTMLHeadContentsPublic(t *testing.T) {
 		expected   []byte
 	}
 
-	tests := []tc{
-		{
+	tests := make([]tc, 0, 4)
+	tests = append(tests,
+		tc{
 			"appends <head> contents",
 			[]byte(`<html><head>Original Head Content</head><body>Test</body></html>`),
 			[]byte("-Appended"),
 			[]byte(`<html><head>Original Head Content-Appended</head><body>Test</body></html>`),
 		},
-		{
+		tc{
 			"doesn't modify body on empty appendWith",
 			[]byte(`<html><head>Original Head Content</head></html>`),
 			[]byte(""),
 			[]byte(`<html><head>Original Head Content</head></html>`),
 		},
-		{
+		tc{
 			"doesn't modify response if no <head> is present",
 			[]byte(`<html><body>Test</body></html>`),
 			[]byte("test"),
 			[]byte(`<html><body>Test</body></html>`),
 		},
-	}
+	)
 
 	generatedBytes := genAlphanumByteArray(10 * 1024 * 1024) // 10MB
 	tests = append(tests, tc{
@@ -81,26 +82,27 @@ func TestPrependHTMLBodyContentsPublic(t *testing.T) {
 		expected    []byte
 	}
 
-	tests := []tc{
-		{
+	tests := make([]tc, 0, 4)
+	tests = append(tests,
+		tc{
 			"prepends <body> contents",
 			[]byte(`<html><head>Test</head><body>Original Body Content</body></html>`),
 			[]byte("Non-"),
 			[]byte(`<html><head>Test</head><body>Non-Original Body Content</body></html>`),
 		},
-		{
+		tc{
 			"prepends <body> contents with empty byte array",
 			[]byte(`<html><body>Original Body Content</body></html>`),
 			[]byte(""),
 			[]byte(`<html><body>Original Body Content</body></html>`),
 		},
-		{
+		tc{
 			"doesn't modify response if no <body> is present",
 			[]byte(`<html></html>`),
 			[]byte("test"),
 			[]byte(`<html></html>`),
 		},
-	}
+	)
 
 	generatedBytes := genAlphanumByteArray(10 * 1024 * 1024) // 10MB
 	tests = append(tests, tc{

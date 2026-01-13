@@ -99,7 +99,7 @@ func replaceContentValue(raw []byte, newVal string) []byte {
 	}
 	valueEnd := valueStart + valueEndRel
 
-	var out []byte
+	out := make([]byte, 0, valueStart+len(newVal)+(len(raw)-valueEnd))
 	out = append(out, raw[:valueStart]...)
 	out = append(out, newVal...)
 	out = append(out, raw[valueEnd:]...)
