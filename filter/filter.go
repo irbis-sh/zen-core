@@ -67,12 +67,6 @@ type whitelistSrv interface {
 	GetPort() int
 }
 
-type ListType string
-
-const (
-	ListTypeCustom ListType = "custom"
-)
-
 // Filter is capable of parsing Adblock-style filter lists and hosts rules and matching URLs against them.
 //
 // Safe for concurrent use.
