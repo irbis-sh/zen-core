@@ -232,6 +232,14 @@ func (f *Filter) HandleRequest(req *http.Request) (*http.Response, error) {
 	return nil, nil
 }
 
+// Finalize optimizes internal data structures after all filter lists have been loaded.
+// This method should be called once after all AddList calls are complete and before
+// the filter starts handling requests. Calling Finalize is not required for correctness,
+// but improves memory usage and lookup performance.
+func (f *Filter) Finalize() {
+	f.networkRules.Compact()
+}
+
 // HandleResponse handles the given response by matching it against the filter rules.
 // If the response should be modified, it modifies it in-place.
 //
