@@ -171,6 +171,7 @@ export class Engine {
       const applied = this.appliedClasses.get(el)!;
       const desiredClasses = desired.get(el);
       if (!desiredClasses) {
+        // No desired classes for this element (no selector matched), remove all applied.
         for (const className of applied.values()) {
           el.classList.remove(className);
           removed++;

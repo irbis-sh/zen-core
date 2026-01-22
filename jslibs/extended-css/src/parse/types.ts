@@ -31,7 +31,7 @@ export interface Declaration {
 }
 
 /**
- * Parsed CSS rule that hides elements matching the selector.
+ * Parsed rule that hides elements matching the selector.
  */
 export interface HideRule {
   type: 'hide';
@@ -39,15 +39,7 @@ export interface HideRule {
 }
 
 /**
- * Parsed canonical CSS rule, such as
- * ```css
- * .block-1, .block-2 {
- *   display: flex;
- *   flex-direction: row;
- * }
- * ```
- *
- * @see {@link https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Syntax/Introduction#css_rulesets}
+ * Parsed rule that styles elements matching the selector.
  */
 export interface StyleRule {
   type: 'style';
