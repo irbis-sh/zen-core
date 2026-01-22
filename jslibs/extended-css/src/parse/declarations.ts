@@ -30,7 +30,7 @@ export function extractStyleDeclarations(ast: CSSTree.CssNode): string | null {
 export function parseDeclarations(decl: string): Declaration[] {
   const declarations: Declaration[] = [];
 
-  const ast = CSSTree.parse(decl, { context: 'declarationList' });
+  const ast = CSSTree.parse(decl, { context: 'declarationList', positions: true });
 
   CSSTree.walk(ast, {
     visit: 'Declaration',
