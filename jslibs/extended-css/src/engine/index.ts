@@ -141,7 +141,7 @@ export class Engine {
 
     for (const rule of this.rules) {
       try {
-        const els = rule.executor.match(this.target, { forgiving: true });
+        const els = rule.executor.match(this.target);
         for (const el of els) {
           if (!(el instanceof HTMLElement)) continue;
           let classes = matches.get(el);
