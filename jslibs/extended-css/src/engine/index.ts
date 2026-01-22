@@ -255,7 +255,6 @@ export class Engine {
 
     this.observer = new MutationObserver((mutations, observer) => {
       if (mutations.length === 0) return;
-      if (mutations.every((m) => m.type === 'attributes')) return;
 
       cb(observer);
     });
