@@ -225,7 +225,7 @@ export class Engine {
   private createStyleSheet(cssText: string): void {
     if (!this.styleEl) {
       this.styleEl = document.createElement('style');
-      document.head.appendChild(this.styleEl);
+      (document.head || document.documentElement).appendChild(this.styleEl);
     }
 
     this.styleEl.textContent = cssText;
