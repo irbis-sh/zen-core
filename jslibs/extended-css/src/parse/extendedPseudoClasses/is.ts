@@ -1,5 +1,5 @@
-import { parse } from '..';
 import { SelectorExecutor } from '../../engine/selectorExecutor';
+import { parseRawSelectorList } from '../selectorList';
 import { Step } from '../types';
 
 export class Is implements Step {
@@ -8,7 +8,7 @@ export class Is implements Step {
   private executor: SelectorExecutor;
 
   constructor(selector: string) {
-    this.executor = new SelectorExecutor(parse(selector));
+    this.executor = new SelectorExecutor(parseRawSelectorList(selector));
   }
 
   run(input: Element[]): Element[] {

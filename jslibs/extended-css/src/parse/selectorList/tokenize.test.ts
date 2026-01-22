@@ -1,4 +1,5 @@
 import { describe, test } from '@jest/globals';
+import * as CSSTree from 'css-tree';
 
 import { tokenize } from './tokenize';
 
@@ -32,7 +33,9 @@ describe('tokenize', () => {
 
     ['div, .banner', 'RawTok(div), RawTok(.banner)'],
   ])('tokenize selector %j', (input, expected) => {
-    const got = tokenize(input)
+    const ast = CSSTree.parse(input, { context: 'selectorList', positions: true }) as CSSTree.SelectorList;
+
+    const got = tokenize(ast, input)
       .map((t) => t.map((t) => t.toString()).join(' '))
       .join(', ');
     expect(got).toEqual(expected);

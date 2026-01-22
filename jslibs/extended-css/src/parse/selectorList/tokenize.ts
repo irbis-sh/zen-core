@@ -1,6 +1,7 @@
 import * as CSSTree from 'css-tree';
 
-import { extPseudoClasses } from './extendedPseudoClasses';
+import { extPseudoClasses } from '../extendedPseudoClasses';
+import { getLiteral } from '../utils/getLiteral';
 
 /**
  * Intermediate representation token.
@@ -15,14 +16,12 @@ export type SelectorTokens = IRToken[];
 /**
  * Parses a selector/selector list into an intermediate token representation.
  */
-export function tokenize(selectorList: string): SelectorTokens[] {
-  const ast = CSSTree.parse(selectorList, { context: 'selectorList', positions: true });
-
+export function tokenize(ast: CSSTree.SelectorList, raw: string): SelectorTokens[] {
   const result: IRToken[][] = [];
 
-  (ast as CSSTree.SelectorList).children.forEach((selectorNode) => {
+  ast.children.forEach((selectorNode) => {
     if (selectorNode.type === 'Selector') {
-      result.push(parseTokens(selectorNode, selectorList));
+      result.push(parseTokens(selectorNode, raw));
     }
   });
 
@@ -41,7 +40,7 @@ function parseTokens(ast: CSSTree.CssNode, selector: string): IRToken[] {
     cssBuf = '';
   };
 
-  const getLiteral = (node: CSSTree.CssNode) => selector.slice(node.loc!.start.offset, node.loc!.end.offset);
+  const getNodeLit = (node: CSSTree.CssNode) => getLiteral(node, selector);
 
   CSSTree.walk(ast, (node) => {
     switch (node.type) {
@@ -52,7 +51,7 @@ function parseTokens(ast: CSSTree.CssNode, selector: string): IRToken[] {
       case 'ClassSelector':
       case 'TypeSelector':
       case 'AttributeSelector':
-        cssBuf += getLiteral(node);
+        cssBuf += getNodeLit(node);
         if (node.type === 'AttributeSelector') return CSSTree.walk.skip;
         return;
 
@@ -71,11 +70,11 @@ function parseTokens(ast: CSSTree.CssNode, selector: string): IRToken[] {
             throw new Error(`:${name}: expected an argument, got null/undefined`);
           }
 
-          const argValue = getLiteral(arg);
+          const argValue = getNodeLit(arg);
 
           out.push(new ExtToken(name as keyof typeof extPseudoClasses, argValue));
         } else {
-          cssBuf += getLiteral(node);
+          cssBuf += getNodeLit(node);
         }
         return CSSTree.walk.skip;
       }

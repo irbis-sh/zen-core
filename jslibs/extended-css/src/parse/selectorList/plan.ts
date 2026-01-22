@@ -1,8 +1,9 @@
-import { Child, Descendant, NextSibling, SubsequentSibling } from './combinators';
-import { extPseudoClasses } from './extendedPseudoClasses';
+import { Child, Descendant, NextSibling, SubsequentSibling } from '../combinators';
+import { extPseudoClasses } from '../extendedPseudoClasses';
+import { Selector } from '../types';
+
 import { RawMatches, RawQuery } from './raw';
 import { CombToken, IRToken } from './tokenize';
-import { Selector } from './types';
 
 /**
  * Builds a final, optimized query out of intermediate representation tokens.

@@ -1,4 +1,4 @@
-import { Step } from './types';
+import { Step } from '../types';
 
 export class RawQuery implements Step {
   constructor(private query: string) {}

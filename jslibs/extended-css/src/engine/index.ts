@@ -1,4 +1,4 @@
-import { parse } from '../parse';
+import { parseRawSelectorList } from '../parse/selectorList';
 import { createLogger } from '../utils/logger';
 import { throttle } from '../utils/throttle';
 
@@ -64,7 +64,7 @@ export class Engine {
       if (trimmed.length === 0) continue;
 
       try {
-        const selectorList = parse(trimmed);
+        const selectorList = parseRawSelectorList(trimmed);
         executors.push(new SelectorExecutor(selectorList));
       } catch (ex) {
         logger.error(`Failed to parse rule: "${line}"`, ex);
