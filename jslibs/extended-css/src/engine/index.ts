@@ -187,10 +187,6 @@ export class Engine {
           removed++;
         }
       }
-
-      if (applied.size === 0) {
-        this.appliedClasses.delete(el);
-      }
     }
 
     for (const [el, desiredClasses] of desired) {
@@ -208,10 +204,6 @@ export class Engine {
           applied.add(className);
           added++;
         }
-      }
-
-      if (applied.size === 0) {
-        this.appliedClasses.delete(el);
       }
     }
 
