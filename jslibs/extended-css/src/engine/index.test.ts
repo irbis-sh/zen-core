@@ -594,6 +594,29 @@ describe('Engine', () => {
       expect(style.color).toBe('blue');
     });
 
+    test('updates styles when rule match swaps', async () => {
+      jest.useFakeTimers();
+      createTestDOM(`
+        <div class="swap first">Swap</div>
+      `);
+
+      startEngine(`
+        .first:style(color: rgb(255, 0, 0))
+        .second:style(color: rgb(0, 0, 255))
+      `);
+
+      const el = document.querySelector('.swap')!;
+      expect(getComputedStyle(el).color).toBe('rgb(255, 0, 0)');
+
+      el.classList.remove('first');
+      el.classList.add('second');
+
+      await jest.runAllTimersAsync();
+
+      expect(getComputedStyle(el).color).toBe('rgb(0, 0, 255)');
+      jest.useRealTimers();
+    });
+
     test('ignores invalid :style() rule but applies other rules', () => {
       createTestDOM(`
         <div class="ok">Ok</div>
