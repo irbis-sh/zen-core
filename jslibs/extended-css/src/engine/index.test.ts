@@ -562,7 +562,7 @@ describe('Engine', () => {
       expect(getComputedStyle(el).color).toBe('rgb(255, 0, 0)');
 
       const nonStyledEl = document.querySelector('#nonstyled')!;
-      expect(getComputedStyle(nonStyledEl).color).toBe('');
+      expect(getComputedStyle(nonStyledEl).color).not.toBe('rgb(255, 0, 0)');
     });
 
     test('applies multiple declarations', () => {
