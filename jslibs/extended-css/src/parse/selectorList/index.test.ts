@@ -1,8 +1,8 @@
 import { describe, test, expect } from '@jest/globals';
 
-import { parse } from './index';
+import { parseRawSelectorList } from '.';
 
-describe('parse', () => {
+describe('parseSelectorList', () => {
   test.each<[string, string]>([
     ['div', 'RawQuery(div)'],
     ['div span', 'RawQuery(div span)'],
@@ -55,13 +55,13 @@ describe('parse', () => {
       'RawQuery(*) :MinTextLength(2) NextSiblComb RawMatches(div) RawQuery(:scope>div) :Is(...) NextSiblComb RawMatches(span)',
     ],
   ])('parse %j', (input, expected) => {
-    const got = parse(input)
+    const got = parseRawSelectorList(input)
       .map((t) => t.map((t) => t.toString()).join(' '))
       .join(', ');
     expect(got).toEqual(expected);
   });
 
   test('throws on dangling combinator', () => {
-    expect(() => parse('div >')).toThrow(/dangling combinator/i);
+    expect(() => parseRawSelectorList('div >')).toThrow(/dangling combinator/i);
   });
 });

@@ -547,4 +547,108 @@ describe('Engine', () => {
       expect(getVisibleElements('#recommendation')).toHaveLength(1);
     });
   });
+
+  describe(':style() rules', () => {
+    test('applies style without hiding element', () => {
+      createTestDOM(`
+        <div class="styled">Styled content</div>
+        <div id="nonstyled">Non styled content</div>
+      `);
+
+      startEngine('.styled:style(color: rgb(255, 0, 0))');
+
+      const el = document.querySelector('.styled')!;
+      expect(getVisibleElements('.styled')).toHaveLength(1);
+      expect(getComputedStyle(el).color).toBe('rgb(255, 0, 0)');
+
+      const nonStyledEl = document.querySelector('#nonstyled')!;
+      expect(getComputedStyle(nonStyledEl).color).not.toBe('rgb(255, 0, 0)');
+    });
+
+    test('applies multiple declarations', () => {
+      createTestDOM(`
+        <div class="box">Box</div>
+      `);
+
+      startEngine('.box:style(color: rgb(0, 128, 0);background-color: rgb(0, 0, 0))');
+
+      const el = document.querySelector('.box')!;
+      const style = getComputedStyle(el);
+      expect(style.color).toBe('rgb(0, 128, 0)');
+      expect(style.backgroundColor).toBe('rgb(0, 0, 0)');
+    });
+
+    test('applies multiple rules', () => {
+      createTestDOM(`
+        <div class="box">Box</div>
+      `);
+
+      startEngine(`
+        .box:style(visibility: hidden)
+        .box:style(color: blue)
+      `);
+
+      const el = document.querySelector('.box')!;
+      const style = getComputedStyle(el);
+      expect(style.visibility).toBe('hidden');
+      expect(style.color).toBe('blue');
+    });
+
+    test('updates styles when rule match swaps', async () => {
+      jest.useFakeTimers();
+      createTestDOM(`
+        <div class="swap first">Swap</div>
+      `);
+
+      startEngine(`
+        .first:style(color: rgb(255, 0, 0))
+        .second:style(color: rgb(0, 0, 255))
+      `);
+
+      const el = document.querySelector('.swap')!;
+      expect(getComputedStyle(el).color).toBe('rgb(255, 0, 0)');
+
+      el.classList.remove('first');
+      el.classList.add('second');
+
+      await jest.runAllTimersAsync();
+
+      expect(getComputedStyle(el).color).toBe('rgb(0, 0, 255)');
+      jest.useRealTimers();
+    });
+
+    test('ignores invalid :style() rule but applies other rules', () => {
+      createTestDOM(`
+        <div class="ok">Ok</div>
+        <div class="bad">Bad</div>
+      `);
+
+      const rules = `
+        .ok:style(color: rgb(0, 0, 0))
+        .bad:style(color: )
+      `;
+
+      expect(() => startEngine(rules)).not.toThrow();
+      const ok = document.querySelector('.ok')!;
+      expect(getComputedStyle(ok).color).toBe('rgb(0, 0, 0)');
+      expect(getVisibleElements('.bad')).toHaveLength(1);
+    });
+
+    test('applies styles to dynamically added elements', async () => {
+      jest.useFakeTimers();
+      createTestDOM('<div class="container"></div>');
+
+      startEngine('.dynamic:style(color: rgb(128, 0, 128))');
+
+      const el = document.createElement('div');
+      el.className = 'dynamic';
+      el.textContent = 'Dynamic';
+      document.body.appendChild(el);
+
+      await jest.runAllTimersAsync();
+
+      expect(getComputedStyle(el).color).toBe('rgb(128, 0, 128)');
+      jest.useRealTimers();
+    });
+  });
 });
