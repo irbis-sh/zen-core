@@ -128,12 +128,23 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 }
 
 // AddList parses the rules from the given reader and adds them to the filter.
-func (f *Filter) AddList(name string, trusted bool, rules io.Reader) error {
+func (f *Filter) AddList(name string, trusted bool, baseURL string, rules io.Reader) error {
+	expanded, err := expandIncludes(rules, includeOptions{
+		baseURL:  baseURL,
+		maxDepth: 20,
+	})
+	if err != nil {
+		return err
+	}
+
 	var ruleCount, exceptionCount int
-	scanner := bufio.NewScanner(rules)
+	scanner := bufio.NewScanner(expanded)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, "!#include") {
+			return fmt.Errorf("include: directive found after expansion: %q", line)
+		}
 		if len(line) == 0 || ignoreLineRegex.MatchString(line) {
 			continue
 		}
