@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	"net"
 	"time"
 )
 
@@ -44,13 +45,18 @@ func (cg *CertGenerator) GetCertificate(host string) (*tls.Certificate, error) {
 		Subject: pkix.Name{
 			Organization: []string{cg.orgName},
 		},
-		DNSNames:  []string{host},
 		NotBefore: time.Now(),
 		NotAfter:  notAfter,
 
 		KeyUsage:              x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
+	}
+
+	if ip := net.ParseIP(host); ip != nil {
+		template.IPAddresses = []net.IP{ip}
+	} else {
+		template.DNSNames = []string{host}
 	}
 
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, rootCert, &privateKey.PublicKey, rootKey)
