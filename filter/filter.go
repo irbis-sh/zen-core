@@ -141,8 +141,8 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 const includeMaxDepth = 20
 
 // AddURL fetches a filter list from a URL, expands !#include directives, and adds rules to the filter.
-func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
-	if urlStr == "" {
+func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error {
+	if listURL == "" {
 		return errors.New("url is empty")
 	}
 
@@ -153,7 +153,7 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 		if len(line) == 0 || ignoreLineRegex.MatchString(line) {
 			return
 		}
-		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
+		if isException, err := f.addRule(line, &listName, listTrusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
 		} else {
 			countsMu.Lock()
@@ -179,6 +179,12 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 			return
 		}
 
+		base, err := url.Parse(currentURL)
+		if err != nil {
+			log.Printf("filter: error parsing url %q: %v", currentURL, err)
+			return
+		}
+
 		visitedMu.Lock()
 		if _, ok := visited[currentURL]; ok {
 			visitedMu.Unlock()
@@ -200,14 +206,7 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 			return
 		}
 
-		base, err := url.Parse(currentURL)
-		if err != nil {
-			log.Printf("filter: error parsing url %q: %v", currentURL, err)
-			return
-		}
-
 		scanner := bufio.NewScanner(resp.Body)
-
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if after, ok := strings.CutPrefix(line, "!#include"); ok {
@@ -230,10 +229,10 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 	}
 
 	wg.Add(1)
-	go parseURL(urlStr, 0)
+	go parseURL(listURL, 0)
 	wg.Wait()
 
-	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, name)
+	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, listName)
 	return nil
 }
 
