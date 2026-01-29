@@ -9,14 +9,14 @@ import (
 func resolveInclude(base *url.URL, after string) (includeURL string, err error) {
 	target := strings.TrimSpace(after)
 	if target == "" {
-		return "", fmt.Errorf("include: empty !#include")
+		return "", fmt.Errorf("empty !#include")
 	}
 	absURL, isAbs, err := resolveURL(base, target)
 	if err != nil {
-		return "", fmt.Errorf("include: resolve %q (base %q): %w", target, base, err)
+		return "", fmt.Errorf("resolve %q with base %q: %w", target, base, err)
 	}
 	if isAbs && base != nil && !sameHost(base, absURL) {
-		return "", fmt.Errorf("include: forbidden cross-origin include: %q (base %q)", absURL.String(), base.String())
+		return "", fmt.Errorf("forbidden cross-origin include %q with base %q", absURL.String(), base.String())
 	}
 	return absURL.String(), nil
 }
@@ -24,7 +24,7 @@ func resolveInclude(base *url.URL, after string) (includeURL string, err error) 
 func resolveURL(base *url.URL, raw string) (parsedURL *url.URL, isAbs bool, err error) {
 	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, false, fmt.Errorf("include: invalid url/path %q: %w", raw, err)
+		return nil, false, fmt.Errorf("invalid url/path %q: %w", raw, err)
 	}
 
 	if u.IsAbs() {
@@ -32,7 +32,7 @@ func resolveURL(base *url.URL, raw string) (parsedURL *url.URL, isAbs bool, err 
 	}
 
 	if base == nil {
-		return nil, false, fmt.Errorf("include: relative include %q but base url is empty", raw)
+		return nil, false, fmt.Errorf("%q is relative but base url is empty", raw)
 	}
 
 	resolved := base.ResolveReference(u)
