@@ -9,6 +9,9 @@ import (
 var (
 	pacTemplate = template.Must(
 		template.New("pac").Parse(`function FindProxyForURL(url, host) {
+	if (host === "127.0.0.1" || host === "localhost") {
+		return "DIRECT";
+	}
 	var excludedHosts = [{{range $index, $host := .ExcludedHosts}}{{if $index}},{{end}}"{{$host}}"{{end}}];
 	for (var i = 0; i < excludedHosts.length; i++) {
 		if (dnsDomainIs(host, excludedHosts[i])) {
