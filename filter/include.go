@@ -2,27 +2,23 @@ package filter
 
 import (
 	"fmt"
-	"log"
 	"net/url"
 	"strings"
 )
 
-func resolveInclude(base *url.URL, currentURL string, after string) (includeURL string, ok bool) {
+func resolveInclude(base *url.URL, after string) (includeURL string, err error) {
 	target := strings.TrimSpace(after)
 	if target == "" {
-		log.Printf("include: empty !#include in %q", currentURL)
-		return "", false
+		return "", fmt.Errorf("include: empty !#include")
 	}
 	absURL, isAbs, err := resolveURL(base, target)
 	if err != nil {
-		log.Printf("include: resolve %q (base %q): %v", target, currentURL, err)
-		return "", false
+		return "", fmt.Errorf("include: resolve %q (base %q): %w", target, base, err)
 	}
 	if isAbs && base != nil && !sameHost(base, absURL) {
-		log.Printf("include: forbidden cross-origin include: %q (base %q)", absURL.String(), base.String())
-		return "", false
+		return "", fmt.Errorf("include: forbidden cross-origin include: %q (base %q)", absURL.String(), base.String())
 	}
-	return absURL.String(), true
+	return absURL.String(), nil
 }
 
 func resolveURL(base *url.URL, raw string) (parsedURL *url.URL, isAbs bool, err error) {

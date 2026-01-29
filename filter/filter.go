@@ -86,7 +86,6 @@ type Filter struct {
 	client                httpClient
 	eventsEmitter         filterEventsEmitter
 	whitelistSrv          whitelistSrv
-	rulesMu               sync.Mutex
 }
 
 var (
@@ -154,7 +153,6 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 		if len(line) == 0 || ignoreLineRegex.MatchString(line) {
 			return
 		}
-		f.rulesMu.Lock()
 		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
 		} else {
@@ -166,7 +164,6 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 			}
 			countsMu.Unlock()
 		}
-		f.rulesMu.Unlock()
 	}
 
 	visited := make(map[string]struct{})
@@ -214,8 +211,9 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if after, ok := strings.CutPrefix(line, "!#include"); ok {
-				includeURL, ok := resolveInclude(base, currentURL, after)
-				if !ok {
+				includeURL, err := resolveInclude(base, after)
+				if err != nil {
+					log.Printf("%v", err)
 					continue
 				}
 
@@ -250,7 +248,6 @@ func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 			continue
 		}
 
-		f.rulesMu.Lock()
 		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
 		} else if isException {
@@ -258,7 +255,6 @@ func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 		} else {
 			ruleCount++
 		}
-		f.rulesMu.Unlock()
 	}
 	if err := scanner.Err(); err != nil {
 		return err
