@@ -237,9 +237,9 @@ func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error
 }
 
 // AddReader parses the rules from the given reader and adds them to the filter.
-func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
+func (f *Filter) AddReader(listRules io.Reader, listName string, listTrusted bool) error {
 	var ruleCount, exceptionCount int
-	scanner := bufio.NewScanner(rules)
+	scanner := bufio.NewScanner(listRules)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -247,7 +247,7 @@ func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 			continue
 		}
 
-		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
+		if isException, err := f.addRule(line, &listName, listTrusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
 		} else if isException {
 			exceptionCount++
@@ -259,7 +259,7 @@ func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 		return err
 	}
 
-	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, name)
+	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, listName)
 	return nil
 }
 
