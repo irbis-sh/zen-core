@@ -25,7 +25,7 @@ func resolveInclude(base *url.URL, currentURL string, after string) (includeURL 
 	return absURL.String(), true
 }
 
-func resolveURL(base *url.URL, raw string) (url *url.URL, isAbs bool, err error) {
+func resolveURL(base *url.URL, raw string) (parsedURL *url.URL, isAbs bool, err error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, false, fmt.Errorf("include: invalid url/path %q: %w", raw, err)
