@@ -8,6 +8,7 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -153,10 +154,6 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 		if len(line) == 0 || ignoreLineRegex.MatchString(line) {
 			return
 		}
-		if strings.HasPrefix(line, "!#include") {
-			log.Printf("include: directive found in rules: %q", line)
-			return
-		}
 		f.rulesMu.Lock()
 		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
@@ -206,34 +203,24 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 			return
 		}
 
-		base, err := normalizeBaseURL(currentURL)
+		base, err := url.Parse(currentURL)
 		if err != nil {
 			log.Printf("include: invalid base url %q: %v", currentURL, err)
 			return
 		}
 
 		scanner := bufio.NewScanner(resp.Body)
-		scanner.Buffer(make([]byte, 0, 64*1024), includeScannerMaxLine)
 
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if after, ok := strings.CutPrefix(line, "!#include"); ok {
-				target := strings.TrimSpace(after)
-				if target == "" {
-					log.Printf("include: empty !#include in %q", currentURL)
+				includeURL, ok := resolveInclude(base, currentURL, after)
+				if !ok {
 					continue
 				}
-				absURL, isAbs, err := resolveIncludeURL(base, target)
-				if err != nil {
-					log.Printf("include: resolve %q (base %q): %v", target, currentURL, err)
-					continue
-				}
-				if isAbs && base != nil && !sameHost(base, absURL) {
-					log.Printf("include: forbidden cross-origin include: %q (base %q)", absURL.String(), base.String())
-					continue
-				}
+
 				wg.Add(1)
-				go parseURL(absURL.String(), depth+1)
+				go parseURL(includeURL, depth+1)
 				continue
 			}
 
@@ -256,7 +243,6 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 	var ruleCount, exceptionCount int
 	scanner := bufio.NewScanner(rules)
-	scanner.Buffer(make([]byte, 0, 64*1024), includeScannerMaxLine)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
