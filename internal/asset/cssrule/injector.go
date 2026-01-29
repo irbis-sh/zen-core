@@ -1,18 +1,13 @@
 package cssrule
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
-	"html/template"
 	"log"
-	"net/http"
 	"regexp"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/csp"
 	"github.com/ZenPrivacy/zen-core/hostmatch"
-	"github.com/ZenPrivacy/zen-core/httprewrite"
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
@@ -20,8 +15,6 @@ var (
 	RuleRegex          = regexp.MustCompile(`.*#@?\$#.+`)
 	primaryRuleRegex   = regexp.MustCompile(`(.*?)#\$#(.*)`)
 	exceptionRuleRegex = regexp.MustCompile(`(.*?)#@\$#(.+)`)
-
-	injectionTmpl = template.Must(template.New("cssrule").Parse(`<style{{if .Nonce}} nonce="{{.Nonce}}"{{end}}>{{.Rules}}</style>`))
 )
 
 type store interface {
@@ -58,39 +51,14 @@ func (inj *Injector) AddRule(rule string) error {
 	return errors.New("unsupported syntax")
 }
 
-func (inj *Injector) Inject(req *http.Request, res *http.Response) error {
-	hostname := req.URL.Hostname()
+// GetAsset returns the CSS asset for the given hostname.
+func (inj *Injector) GetAsset(hostname string) []byte {
 	cssRules := inj.store.Get(hostname)
 	log.Printf("got %d css rules for %q", len(cssRules), redacted.Redacted(hostname))
 	if len(cssRules) == 0 {
 		return nil
 	}
 
-	nonce, err := csp.PatchHeaders(res, csp.InlineStyle)
-	if err != nil {
-		return fmt.Errorf("patch CSP headers: %w", err)
-	}
 	stylesheet := strings.Join(cssRules, "")
-
-	var injection bytes.Buffer
-	err = injectionTmpl.Execute(&injection, struct {
-		Nonce string
-		Rules template.CSS
-	}{
-		Nonce: nonce,
-		Rules: template.CSS(stylesheet), // #nosec G203 -- CSS rules are limited to trusted filter lists
-		// TODO: Perform rule validation despite rules coming from trusted filter lists.
-	})
-	if err != nil {
-		return fmt.Errorf("execute template: %v", err)
-	}
-
-	// Why append and not prepend?
-	// When multiple CSS rules define an !important property, conflicts are resolved first by specificity and then by the order of the CSS declarations.
-	// Appending ensures our rules take precedence.
-	if err := httprewrite.AppendHTMLHeadContents(res, injection.Bytes()); err != nil {
-		return fmt.Errorf("prepend head contents: %w", err)
-	}
-
-	return nil
+	return []byte(stylesheet)
 }

@@ -1,0 +1,164 @@
+package asset
+
+import (
+	"bytes"
+	"fmt"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+
+	"github.com/ZenPrivacy/zen-core/csp"
+	"github.com/ZenPrivacy/zen-core/httprewrite"
+	"github.com/ZenPrivacy/zen-core/internal/asset/cosmetic"
+	"github.com/ZenPrivacy/zen-core/internal/asset/cssrule"
+	"github.com/ZenPrivacy/zen-core/internal/asset/extendedcss"
+	"github.com/ZenPrivacy/zen-core/internal/asset/jsrule"
+	"github.com/ZenPrivacy/zen-core/internal/asset/scriptlet"
+)
+
+const (
+	cosmeticCSSPath = "/cosmetic.css"
+	cssRulePath     = "/cssrule.css"
+	scriptletsPath  = "/scriptlets.js"
+	extendedCSSPath = "/extendedcss.js"
+	jsRulePath      = "/jsrule.js"
+)
+
+// Engine handles rule ingestion, HTML injection, and asset resolution.
+type Engine struct {
+	scriptlets  *scriptlet.Injector
+	cosmetic    *cosmetic.Injector
+	cssRules    *cssrule.Injector
+	jsRules     *jsrule.Injector
+	extendedCSS *extendedcss.Injector
+
+	scriptletsURL  string
+	jsRuleURL      string
+	extendedCSSURL string
+	cosmeticCSSURL string
+	cssRuleCSSURL  string
+}
+
+// NewEngine constructs an Engine with default bundles and stores.
+func NewEngine(assetServerPort int) (*Engine, error) {
+	scriptlets, err := scriptlet.NewInjectorWithDefaults()
+	if err != nil {
+		return nil, fmt.Errorf("create scriptlets injector: %w", err)
+	}
+	extendedCSS, err := extendedcss.NewInjectorWithDefaults()
+	if err != nil {
+		return nil, fmt.Errorf("create extended css injector: %w", err)
+	}
+	assetServerURL, err := url.Parse("https://" + net.JoinHostPort(host, strconv.Itoa(assetServerPort)))
+	if err != nil {
+		return nil, fmt.Errorf("parse asset server url: %w", err)
+	}
+
+	return &Engine{
+		scriptlets:  scriptlets,
+		cosmetic:    cosmetic.NewInjector(),
+		cssRules:    cssrule.NewInjector(),
+		jsRules:     jsrule.NewInjector(),
+		extendedCSS: extendedCSS,
+
+		scriptletsURL:  getAssetURL(assetServerURL, scriptletsPath),
+		jsRuleURL:      getAssetURL(assetServerURL, jsRulePath),
+		extendedCSSURL: getAssetURL(assetServerURL, extendedCSSPath),
+		cosmeticCSSURL: getAssetURL(assetServerURL, cosmeticCSSPath),
+		cssRuleCSSURL:  getAssetURL(assetServerURL, cssRulePath),
+	}, nil
+}
+
+// AddRule attempts to add a non-network rule. Returns handled=true if consumed.
+func (e *Engine) AddRule(rule string, filterListTrusted bool) (handled bool, err error) {
+	switch {
+	case scriptlet.RuleRegex.MatchString(rule):
+		if err := e.scriptlets.AddRule(rule, filterListTrusted); err != nil {
+			return true, fmt.Errorf("add scriptlet: %w", err)
+		}
+		return true, nil
+	case cosmetic.IsRule(rule):
+		if err := e.cosmetic.AddRule(rule); err != nil {
+			return true, fmt.Errorf("add cosmetic rule: %w", err)
+		}
+		return true, nil
+	case extendedcss.IsRule(rule):
+		if err := e.extendedCSS.AddRule(rule); err != nil {
+			return true, fmt.Errorf("add extended css rule: %w", err)
+		}
+		return true, nil
+	case filterListTrusted && cssrule.RuleRegex.MatchString(rule):
+		if err := e.cssRules.AddRule(rule); err != nil {
+			return true, fmt.Errorf("add css rule: %w", err)
+		}
+		return true, nil
+	case filterListTrusted && jsrule.RuleRegex.MatchString(rule):
+		if err := e.jsRules.AddRule(rule); err != nil {
+			return true, fmt.Errorf("add js rule: %w", err)
+		}
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
+// Inject appends asset tags for the matching hostname into HTML responses.
+func (e *Engine) Inject(req *http.Request, res *http.Response) error {
+	scriptNonce, err := csp.PatchHeaders(res, csp.InlineScript)
+	if err != nil {
+		return fmt.Errorf("patch CSP headers: %w", err)
+	}
+	styleNonce, err := csp.PatchHeaders(res, csp.InlineStyle)
+	if err != nil {
+		return fmt.Errorf("patch CSP headers: %w", err)
+	}
+
+	var injection bytes.Buffer
+	injection.WriteString(fmt.Sprintf(`<script nonce="%s" src="%s"></script>`, scriptNonce, e.scriptletsURL))
+	injection.WriteString(fmt.Sprintf(`<script nonce="%s" src="%s"></script>`, scriptNonce, e.jsRuleURL))
+	injection.WriteString(fmt.Sprintf(`<script nonce="%s" src="%s"></script>`, scriptNonce, e.extendedCSSURL))
+	injection.WriteString(fmt.Sprintf(`<link rel="stylesheet" nonce="%s" href="%s">`, styleNonce, e.cosmeticCSSURL))
+	injection.WriteString(fmt.Sprintf(`<link rel="stylesheet" nonce="%s" href="%s">`, styleNonce, e.cssRuleCSSURL))
+
+	if err := httprewrite.AppendHTMLHeadContents(res, injection.Bytes()); err != nil {
+		return fmt.Errorf("append head contents: %w", err)
+	}
+
+	return nil
+}
+
+// Resolve returns the asset content based on path and referer hostname.
+func (e *Engine) Resolve(path, hostname string) (contentType string, body []byte, err error) {
+	switch path {
+	case cosmeticCSSPath:
+		return "text/css; charset=utf-8", e.cosmetic.GetAsset(hostname), nil
+	case cssRulePath:
+		body = e.cssRules.GetAsset(hostname)
+		return "text/css; charset=utf-8", body, nil
+	case scriptletsPath:
+		if body, err = e.scriptlets.GetAsset(hostname); err != nil {
+			return "", nil, fmt.Errorf("scriptlets asset: %w", err)
+		} else {
+			return "application/javascript; charset=utf-8", body, err
+		}
+	case extendedCSSPath:
+		if body, err = e.extendedCSS.GetAsset(hostname); err != nil {
+			return "", nil, fmt.Errorf("extended CSS asset: %w", err)
+		} else {
+			return "application/javascript; charset=utf-8", body, err
+		}
+	case jsRulePath:
+		if body, err = e.jsRules.GetAsset(hostname); err != nil {
+			return "", nil, fmt.Errorf("js rules: %w", err)
+		} else {
+			return "application/javascript; charset=utf-8", body, err
+		}
+	default:
+		return "", nil, nil
+	}
+}
+
+func getAssetURL(base *url.URL, path string) string {
+	return base.JoinPath(path).String()
+}

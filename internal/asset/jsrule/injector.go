@@ -4,11 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 	"regexp"
 
 	"github.com/ZenPrivacy/zen-core/hostmatch"
-	"github.com/ZenPrivacy/zen-core/httprewrite"
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
@@ -27,8 +25,8 @@ var (
 	primaryRuleRegex   = regexp.MustCompile(`(.*)#%#(.+)`)
 	exceptionRuleRegex = regexp.MustCompile(`(.*)#@%#(.+)`)
 
-	injectionStart = []byte("<script>(function() {")
-	injectionEnd   = []byte("})()</script>")
+	injectionStart = []byte("(function(){")
+	injectionEnd   = []byte("})();")
 )
 
 func NewInjector() *Injector {
@@ -55,12 +53,12 @@ func (inj *Injector) AddRule(rule string) error {
 	return errors.New("unsupported syntax")
 }
 
-func (inj *Injector) Inject(req *http.Request, res *http.Response) error {
-	hostname := req.URL.Hostname()
+// GetAsset returns the JS asset for the given hostname.
+func (inj *Injector) GetAsset(hostname string) ([]byte, error) {
 	scripts := inj.store.Get(hostname)
 	log.Printf("got %d js rules for %q", len(scripts), redacted.Redacted(hostname))
 	if len(scripts) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	var injection []byte
@@ -73,9 +71,5 @@ func (inj *Injector) Inject(req *http.Request, res *http.Response) error {
 	}
 	injection = append(injection, injectionEnd...)
 
-	if err := httprewrite.PrependHTMLBodyContents(res, injection); err != nil {
-		return fmt.Errorf("prepend body contents: %w", err)
-	}
-
-	return nil
+	return injection, nil
 }
