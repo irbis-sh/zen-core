@@ -175,14 +175,14 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 	parseURL = func(currentURL string, depth int) {
 		defer wg.Done()
 		if depth > includeMaxDepth {
-			log.Printf("include: max depth exceeded (%d): %q", includeMaxDepth, currentURL)
+			log.Printf("filter: max depth %d exceeded when adding %q", includeMaxDepth, currentURL)
 			return
 		}
 
 		visitedMu.Lock()
 		if _, ok := visited[currentURL]; ok {
 			visitedMu.Unlock()
-			log.Printf("include: duplicate include skipped: %q", currentURL)
+			log.Printf("filter: duplicate include %q skipped", currentURL)
 			return
 		}
 		visited[currentURL] = struct{}{}
@@ -190,19 +190,19 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 
 		resp, err := f.client.Get(currentURL)
 		if err != nil {
-			log.Printf("include: fetch %q: %v", currentURL, err)
+			log.Printf("filter: error getting %q: %v", currentURL, err)
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("include: fetch %q: non-200 response: %s", currentURL, resp.Status)
+			log.Printf("filter: failed to fetch %q with non-200 response: %s", currentURL, resp.Status)
 			return
 		}
 
 		base, err := url.Parse(currentURL)
 		if err != nil {
-			log.Printf("include: invalid base url %q: %v", currentURL, err)
+			log.Printf("filter: error parsing url %q: %v", currentURL, err)
 			return
 		}
 
@@ -213,7 +213,7 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 			if after, ok := strings.CutPrefix(line, "!#include"); ok {
 				includeURL, err := resolveInclude(base, after)
 				if err != nil {
-					log.Printf("%v", err)
+					log.Printf("filter: error resolving include: %v", err)
 					continue
 				}
 
@@ -225,7 +225,7 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 			addRuleLine(line)
 		}
 		if err := scanner.Err(); err != nil {
-			log.Printf("include: scan %q: %v", currentURL, err)
+			log.Printf("filter: error scanning %q: %v", currentURL, err)
 		}
 	}
 
