@@ -8,8 +8,10 @@ import (
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/ZenPrivacy/zen-core/cosmetic"
 	"github.com/ZenPrivacy/zen-core/cssrule"
@@ -25,6 +27,10 @@ type filterEventsEmitter interface {
 	OnFilterBlock(method, url, referer string, rules []rule.Rule)
 	OnFilterRedirect(method, url, to, referer string, rules []rule.Rule)
 	OnFilterModify(method, url, referer string, rules []rule.Rule)
+}
+
+type httpClient interface {
+	Get(url string) (*http.Response, error)
 }
 
 type networkRules interface {
@@ -77,6 +83,7 @@ type Filter struct {
 	cssRulesInjector      cssRulesInjector
 	jsRuleInjector        jsRuleInjector
 	extendedCSSInjector   extendedCSSInjector
+	client                httpClient
 	eventsEmitter         filterEventsEmitter
 	whitelistSrv          whitelistSrv
 }
@@ -87,7 +94,7 @@ var (
 )
 
 // NewFilter creates and initializes a new filter.
-func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector, cosmeticRulesInjector cosmeticRulesInjector, cssRulesInjector cssRulesInjector, jsRuleInjector jsRuleInjector, extendedCSSInjector extendedCSSInjector, eventsEmitter filterEventsEmitter, whitelistSrv whitelistSrv) (*Filter, error) {
+func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector, cosmeticRulesInjector cosmeticRulesInjector, cssRulesInjector cssRulesInjector, jsRuleInjector jsRuleInjector, extendedCSSInjector extendedCSSInjector, client httpClient, eventsEmitter filterEventsEmitter, whitelistSrv whitelistSrv) (*Filter, error) {
 	if eventsEmitter == nil {
 		return nil, errors.New("eventsEmitter is nil")
 	}
@@ -109,6 +116,9 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 	if extendedCSSInjector == nil {
 		return nil, errors.New("extendedCSSInjector is nil")
 	}
+	if client == nil {
+		return nil, errors.New("client is nil")
+	}
 	if whitelistSrv == nil {
 		return nil, errors.New("whitelistSrv is nil")
 	}
@@ -120,6 +130,7 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 		cssRulesInjector:      cssRulesInjector,
 		jsRuleInjector:        jsRuleInjector,
 		extendedCSSInjector:   extendedCSSInjector,
+		client:                client,
 		eventsEmitter:         eventsEmitter,
 		whitelistSrv:          whitelistSrv,
 	}
@@ -127,8 +138,107 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 	return f, nil
 }
 
-// AddList parses the rules from the given reader and adds them to the filter.
-func (f *Filter) AddList(name string, trusted bool, rules io.Reader) error {
+const includeMaxDepth = 20
+
+// AddURL fetches a filter list from a URL, expands !#include directives, and adds rules to the filter.
+func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
+	if urlStr == "" {
+		return errors.New("url is empty")
+	}
+
+	var ruleCount, exceptionCount int
+	var countsMu sync.Mutex
+
+	addRuleLine := func(line string) {
+		if len(line) == 0 || ignoreLineRegex.MatchString(line) {
+			return
+		}
+		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
+			// log.Printf("error adding rule: %v", err)
+		} else {
+			countsMu.Lock()
+			if isException {
+				exceptionCount++
+			} else {
+				ruleCount++
+			}
+			countsMu.Unlock()
+		}
+	}
+
+	visited := make(map[string]struct{})
+	var visitedMu sync.Mutex
+
+	var wg sync.WaitGroup
+	var parseURL func(currentURL string, depth int)
+
+	parseURL = func(currentURL string, depth int) {
+		defer wg.Done()
+		if depth > includeMaxDepth {
+			log.Printf("include: max depth exceeded (%d): %q", includeMaxDepth, currentURL)
+			return
+		}
+
+		visitedMu.Lock()
+		if _, ok := visited[currentURL]; ok {
+			visitedMu.Unlock()
+			log.Printf("include: duplicate include skipped: %q", currentURL)
+			return
+		}
+		visited[currentURL] = struct{}{}
+		visitedMu.Unlock()
+
+		resp, err := f.client.Get(currentURL)
+		if err != nil {
+			log.Printf("include: fetch %q: %v", currentURL, err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("include: fetch %q: non-200 response: %s", currentURL, resp.Status)
+			return
+		}
+
+		base, err := url.Parse(currentURL)
+		if err != nil {
+			log.Printf("include: invalid base url %q: %v", currentURL, err)
+			return
+		}
+
+		scanner := bufio.NewScanner(resp.Body)
+
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if after, ok := strings.CutPrefix(line, "!#include"); ok {
+				includeURL, err := resolveInclude(base, after)
+				if err != nil {
+					log.Printf("%v", err)
+					continue
+				}
+
+				wg.Add(1)
+				go parseURL(includeURL, depth+1)
+				continue
+			}
+
+			addRuleLine(line)
+		}
+		if err := scanner.Err(); err != nil {
+			log.Printf("include: scan %q: %v", currentURL, err)
+		}
+	}
+
+	wg.Add(1)
+	go parseURL(urlStr, 0)
+	wg.Wait()
+
+	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, name)
+	return nil
+}
+
+// AddReader parses the rules from the given reader and adds them to the filter.
+func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 	var ruleCount, exceptionCount int
 	scanner := bufio.NewScanner(rules)
 
@@ -233,7 +343,7 @@ func (f *Filter) HandleRequest(req *http.Request) (*http.Response, error) {
 }
 
 // Finalize optimizes internal data structures after all filter lists have been loaded.
-// This method should be called once after all AddList calls are complete and before
+// This method should be called once after all AddURL/AddReader calls are complete and before
 // the filter starts handling requests. Calling Finalize is not required for correctness,
 // but improves memory usage and lookup performance.
 func (f *Filter) Finalize() {
