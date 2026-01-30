@@ -20,24 +20,42 @@ const (
 	Style
 )
 
-// PatchHeaders mutates CSP headers and meta tags so a remote <script> or <link>
-// element can load. Returns a nonce to place on the element.
-func PatchHeaders(res *http.Response, kind tagKind, resourceURL string) (string, error) {
-	if res == nil {
-		return "", nil
+// PatchOperation represents a single CSP patch with its nonce and target resource.
+type PatchOperation struct {
+	Nonce       string
+	Kind        tagKind
+	ResourceURL string
+}
+
+// PatchHeadersBatch mutates CSP headers and meta tags for multiple resources in a single pass.
+// Returns the generated patch operations with nonces to place on elements.
+func PatchHeadersBatch(res *http.Response, operations []PatchOperation) error {
+	if res == nil || len(operations) == 0 {
+		return nil
 	}
 
-	nonce := newCSPNonce()
+	for _, op := range operations {
+		patchOneHeader(res.Header, cspHeader, op.Nonce, op.Kind, op.ResourceURL)
+		patchOneHeader(res.Header, cspReportOnly, op.Nonce, op.Kind, op.ResourceURL)
+	}
 
-	err := patchMetaCSPs(res, nonce, kind, resourceURL)
+	err := patchMetaCSPsBatch(res, operations)
 	if err != nil {
-		return "", fmt.Errorf("patch meta CSP: %w", err)
+		return fmt.Errorf("patch meta CSP: %w", err)
 	}
 
-	patchOneHeader(res.Header, cspHeader, nonce, kind, resourceURL)
-	patchOneHeader(res.Header, cspReportOnly, nonce, kind, resourceURL)
+	return nil
+}
 
-	return nonce, nil
+// NewNonce generates a cryptographically random nonce for CSP.
+func NewNonce() string {
+	// From https://www.w3.org/TR/CSP3/#security-nonces:
+	// The generated value SHOULD be at least 128 bits long (before encoding), and
+	// SHOULD be generated via a cryptographically secure random number generator in order to ensure that the value is difficult for an attacker to predict.
+	// The code below satisfies both of these requirements.
+	var b [18]byte // 144 bits
+	rand.Read(b[:])
+	return base64.StdEncoding.EncodeToString(b[:])
 }
 
 func patchOneHeader(h http.Header, key, nonce string, kind tagKind, resourceURL string) {
@@ -114,17 +132,6 @@ func cutDirective(s string) (string, string) {
 		return strings.ToLower(name), ""
 	}
 	return strings.ToLower(name), strings.TrimSpace(rest)
-}
-
-// newCSPNonce returns a cryptographically random base64 string.
-func newCSPNonce() string {
-	// From https://www.w3.org/TR/CSP3/#security-nonces:
-	// The generated value SHOULD be at least 128 bits long (before encoding), and
-	// SHOULD be generated via a cryptographically secure random number generator in order to ensure that the value is difficult for an attacker to predict.
-	// The code below satisfies both of these requirements.
-	var b [18]byte // 144 bits
-	rand.Read(b[:])
-	return base64.StdEncoding.EncodeToString(b[:])
 }
 
 // safeNonce checks if it's safe to inject a nonce into the source list.

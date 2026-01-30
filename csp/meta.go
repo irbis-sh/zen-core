@@ -11,8 +11,8 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
-// patchMetaCSPs mutates HTML <meta> tags that define Content-Security-Policy.
-func patchMetaCSPs(res *http.Response, nonce string, kind tagKind, resourceURL string) error {
+// patchMetaCSPsBatch mutates HTML <meta> tags for multiple CSP operations in a single pass.
+func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 	if res.Body == nil || res.Body == http.NoBody {
 		return nil
 	}
@@ -55,14 +55,23 @@ func patchMetaCSPs(res *http.Response, nonce string, kind tagKind, resourceURL s
 					continue
 				}
 
-				patched, changed := patchPolicies([]string{contentVal}, nonce, kind, resourceURL)
+				// Apply all operations to this meta tag's CSP
+				patchedContent := contentVal
+				changed := false
+				for _, op := range operations {
+					patched, patchChanged := patchPolicies([]string{patchedContent}, op.Nonce, op.Kind, op.ResourceURL)
+					if patchChanged {
+						patchedContent = patched[0]
+						changed = true
+					}
+				}
+
 				if !changed {
-					dst.Write(z.Raw())
+					dst.Write(raw)
 					continue
 				}
 
-				newContent := patched[0]
-				patchedRaw := replaceContentValue(raw, newContent)
+				patchedRaw := replaceContentValue(raw, patchedContent)
 				dst.Write(patchedRaw)
 
 			default:

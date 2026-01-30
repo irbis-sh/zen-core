@@ -105,24 +105,20 @@ func (e *Engine) AddRule(rule string, filterListTrusted bool) (handled bool, err
 
 // Inject appends asset tags for the matching hostname into HTML responses.
 func (e *Engine) Inject(req *http.Request, res *http.Response) error {
-	scriptletsNonce, err := csp.PatchHeaders(res, csp.Script, e.scriptletsURL)
-	if err != nil {
-		return fmt.Errorf("patch CSP headers: %w", err)
+	scriptletsNonce := csp.NewNonce()
+	jsRuleNonce := csp.NewNonce()
+	extendedCSSNonce := csp.NewNonce()
+	cosmeticCSSNonce := csp.NewNonce()
+	cssRuleNonce := csp.NewNonce()
+
+	operations := []csp.PatchOperation{
+		{Nonce: scriptletsNonce, Kind: csp.Script, ResourceURL: e.scriptletsURL},
+		{Nonce: jsRuleNonce, Kind: csp.Script, ResourceURL: e.jsRuleURL},
+		{Nonce: extendedCSSNonce, Kind: csp.Script, ResourceURL: e.extendedCSSURL},
+		{Nonce: cosmeticCSSNonce, Kind: csp.Style, ResourceURL: e.cosmeticCSSURL},
+		{Nonce: cssRuleNonce, Kind: csp.Style, ResourceURL: e.cssRuleCSSURL},
 	}
-	jsRuleNonce, err := csp.PatchHeaders(res, csp.Script, e.jsRuleURL)
-	if err != nil {
-		return fmt.Errorf("patch CSP headers: %w", err)
-	}
-	extendedCSSNonce, err := csp.PatchHeaders(res, csp.Script, e.extendedCSSURL)
-	if err != nil {
-		return fmt.Errorf("patch CSP headers: %w", err)
-	}
-	cosmeticCSSNonce, err := csp.PatchHeaders(res, csp.Style, e.cosmeticCSSURL)
-	if err != nil {
-		return fmt.Errorf("patch CSP headers: %w", err)
-	}
-	cssRuleNonce, err := csp.PatchHeaders(res, csp.Style, e.cssRuleCSSURL)
-	if err != nil {
+	if err := csp.PatchHeadersBatch(res, operations); err != nil {
 		return fmt.Errorf("patch CSP headers: %w", err)
 	}
 
