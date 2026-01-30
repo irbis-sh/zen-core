@@ -16,26 +16,21 @@ type certGenerator interface {
 	GetCertificate(host string) (*tls.Certificate, error)
 }
 
-// Resolver returns asset content based on path and referer.
-type Resolver interface {
-	Resolve(path, hostname string) (contentType string, body []byte, err error)
-}
-
 // Server hosts asset resources over HTTPS.
 type Server struct {
 	addr          string
-	resolver      Resolver
+	engine        *Engine
 	certGenerator certGenerator
 	httpServer    *http.Server
 }
 
 // NewServer creates a new HTTPS asset server bound to [host].
-func NewServer(port int, resolver Resolver, certGenerator certGenerator) (*Server, error) {
+func NewServer(port int, engine *Engine, certGenerator certGenerator) (*Server, error) {
 	if port == 0 {
 		return nil, errors.New("port cannot be 0")
 	}
-	if resolver == nil {
-		return nil, errors.New("resolver is nil")
+	if engine == nil {
+		return nil, errors.New("engine is nil")
 	}
 	if certGenerator == nil {
 		return nil, errors.New("certGenerator is nil")
@@ -45,7 +40,7 @@ func NewServer(port int, resolver Resolver, certGenerator certGenerator) (*Serve
 
 	s := &Server{
 		addr:          addr,
-		resolver:      resolver,
+		engine:        engine,
 		certGenerator: certGenerator,
 	}
 
@@ -123,7 +118,32 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		refererURL = parsed
 	}
 
-	contentType, body, err := s.resolver.Resolve(r.URL.Path, refererURL.Hostname())
+	var (
+		kind        AssetKind
+		contentType string
+	)
+	switch r.URL.Path {
+	case cosmeticCSSPath:
+		kind = AssetCosmeticCSS
+		contentType = "text/css; charset=utf-8"
+	case cssRulePath:
+		kind = AssetCSSRule
+		contentType = "text/css; charset=utf-8"
+	case scriptletsPath:
+		kind = AssetScriptlets
+		contentType = "application/javascript; charset=utf-8"
+	case extendedCSSPath:
+		kind = AssetExtendedCSS
+		contentType = "application/javascript; charset=utf-8"
+	case jsRulePath:
+		kind = AssetJSRule
+		contentType = "application/javascript; charset=utf-8"
+	default:
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	body, err := s.engine.AssetBytes(refererURL.Hostname(), kind)
 	if err != nil {
 		log.Printf("assetserver: failed to resolve asset %q: %v", r.URL.Path, err)
 		http.Error(w, "asset resolution error", http.StatusInternalServerError)

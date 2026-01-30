@@ -25,6 +25,16 @@ const (
 	jsRulePath      = "/jsrule.js"
 )
 
+type AssetKind int
+
+const (
+	AssetScriptlets AssetKind = iota
+	AssetJSRule
+	AssetExtendedCSS
+	AssetCosmeticCSS
+	AssetCSSRule
+)
+
 // Engine handles rule ingestion, HTML injection, and asset resolution.
 type Engine struct {
 	scriptlets  *scriptlet.Injector
@@ -136,34 +146,33 @@ func (e *Engine) Inject(req *http.Request, res *http.Response) error {
 	return nil
 }
 
-// Resolve returns the asset content based on path and referer hostname.
-func (e *Engine) Resolve(path, hostname string) (contentType string, body []byte, err error) {
-	switch path {
-	case cosmeticCSSPath:
-		return "text/css; charset=utf-8", e.cosmetic.GetAsset(hostname), nil
-	case cssRulePath:
-		body = e.cssRules.GetAsset(hostname)
-		return "text/css; charset=utf-8", body, nil
-	case scriptletsPath:
-		if body, err = e.scriptlets.GetAsset(hostname); err != nil {
-			return "", nil, fmt.Errorf("scriptlets asset: %w", err)
-		} else {
-			return "application/javascript; charset=utf-8", body, err
+// AssetBytes returns the asset content for a hostname and kind.
+func (e *Engine) AssetBytes(hostname string, kind AssetKind) ([]byte, error) {
+	switch kind {
+	case AssetCosmeticCSS:
+		return e.cosmetic.GetAsset(hostname), nil
+	case AssetCSSRule:
+		return e.cssRules.GetAsset(hostname), nil
+	case AssetScriptlets:
+		body, err := e.scriptlets.GetAsset(hostname)
+		if err != nil {
+			return nil, fmt.Errorf("scriptlets asset: %w", err)
 		}
-	case extendedCSSPath:
-		if body, err = e.extendedCSS.GetAsset(hostname); err != nil {
-			return "", nil, fmt.Errorf("extended CSS asset: %w", err)
-		} else {
-			return "application/javascript; charset=utf-8", body, err
+		return body, nil
+	case AssetExtendedCSS:
+		body, err := e.extendedCSS.GetAsset(hostname)
+		if err != nil {
+			return nil, fmt.Errorf("extended CSS asset: %w", err)
 		}
-	case jsRulePath:
-		if body, err = e.jsRules.GetAsset(hostname); err != nil {
-			return "", nil, fmt.Errorf("js rules: %w", err)
-		} else {
-			return "application/javascript; charset=utf-8", body, err
+		return body, nil
+	case AssetJSRule:
+		body, err := e.jsRules.GetAsset(hostname)
+		if err != nil {
+			return nil, fmt.Errorf("js rules: %w", err)
 		}
+		return body, nil
 	default:
-		return "", nil, nil
+		return nil, fmt.Errorf("unknown asset kind: %d", kind)
 	}
 }
 
