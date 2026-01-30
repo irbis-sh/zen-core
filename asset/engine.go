@@ -105,21 +105,33 @@ func (e *Engine) AddRule(rule string, filterListTrusted bool) (handled bool, err
 
 // Inject appends asset tags for the matching hostname into HTML responses.
 func (e *Engine) Inject(req *http.Request, res *http.Response) error {
-	scriptNonce, err := csp.PatchHeaders(res, csp.InlineScript)
+	scriptletsNonce, err := csp.PatchHeaders(res, csp.Script, e.scriptletsURL)
 	if err != nil {
 		return fmt.Errorf("patch CSP headers: %w", err)
 	}
-	styleNonce, err := csp.PatchHeaders(res, csp.InlineStyle)
+	jsRuleNonce, err := csp.PatchHeaders(res, csp.Script, e.jsRuleURL)
+	if err != nil {
+		return fmt.Errorf("patch CSP headers: %w", err)
+	}
+	extendedCSSNonce, err := csp.PatchHeaders(res, csp.Script, e.extendedCSSURL)
+	if err != nil {
+		return fmt.Errorf("patch CSP headers: %w", err)
+	}
+	cosmeticCSSNonce, err := csp.PatchHeaders(res, csp.Style, e.cosmeticCSSURL)
+	if err != nil {
+		return fmt.Errorf("patch CSP headers: %w", err)
+	}
+	cssRuleNonce, err := csp.PatchHeaders(res, csp.Style, e.cssRuleCSSURL)
 	if err != nil {
 		return fmt.Errorf("patch CSP headers: %w", err)
 	}
 
 	var injection bytes.Buffer
-	injection.WriteString(fmt.Sprintf(`<script nonce="%s" src="%s"></script>`, scriptNonce, e.scriptletsURL))
-	injection.WriteString(fmt.Sprintf(`<script nonce="%s" src="%s"></script>`, scriptNonce, e.jsRuleURL))
-	injection.WriteString(fmt.Sprintf(`<script nonce="%s" src="%s"></script>`, scriptNonce, e.extendedCSSURL))
-	injection.WriteString(fmt.Sprintf(`<link rel="stylesheet" nonce="%s" href="%s">`, styleNonce, e.cosmeticCSSURL))
-	injection.WriteString(fmt.Sprintf(`<link rel="stylesheet" nonce="%s" href="%s">`, styleNonce, e.cssRuleCSSURL))
+	injection.WriteString(scriptTag(e.scriptletsURL, scriptletsNonce))
+	injection.WriteString(scriptTag(e.jsRuleURL, jsRuleNonce))
+	injection.WriteString(scriptTag(e.extendedCSSURL, extendedCSSNonce))
+	injection.WriteString(styleTag(e.cosmeticCSSURL, cosmeticCSSNonce))
+	injection.WriteString(styleTag(e.cssRuleCSSURL, cssRuleNonce))
 
 	if err := httprewrite.AppendHTMLHeadContents(res, injection.Bytes()); err != nil {
 		return fmt.Errorf("append head contents: %w", err)
@@ -161,4 +173,12 @@ func (e *Engine) Resolve(path, hostname string) (contentType string, body []byte
 
 func getAssetURL(base *url.URL, path string) string {
 	return base.JoinPath(path).String()
+}
+
+func scriptTag(src, nonce string) string {
+	return fmt.Sprintf(`<script nonce="%s" src="%s"></script>`, nonce, src)
+}
+
+func styleTag(href, nonce string) string {
+	return fmt.Sprintf(`<link rel="stylesheet" nonce="%s" href="%s">`, nonce, href)
 }

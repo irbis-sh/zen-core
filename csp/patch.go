@@ -13,41 +13,40 @@ const (
 	cspReportOnly = "Content-Security-Policy-Report-Only"
 )
 
-type inlineKind int
+type tagKind int
 
 const (
-	InlineScript inlineKind = iota
-	InlineStyle
+	Script tagKind = iota
+	Style
 )
 
-// PatchHeaders mutates CSP headers and meta tags so an inline <script> or <style>
-// element can run. Returns the nonce to place on the inline tag.
-// The nonce is safe to inject unconditionally.
-func PatchHeaders(res *http.Response, kind inlineKind) (string, error) {
+// PatchHeaders mutates CSP headers and meta tags so a remote <script> or <link>
+// element can load. Returns a nonce to place on the element.
+func PatchHeaders(res *http.Response, kind tagKind, resourceURL string) (string, error) {
 	if res == nil {
 		return "", nil
 	}
 
 	nonce := newCSPNonce()
 
-	err := patchMetaCSPs(res, nonce, kind)
+	err := patchMetaCSPs(res, nonce, kind, resourceURL)
 	if err != nil {
 		return "", fmt.Errorf("patch meta CSP: %w", err)
 	}
 
-	patchOneHeader(res.Header, cspHeader, nonce, kind)
-	patchOneHeader(res.Header, cspReportOnly, nonce, kind)
+	patchOneHeader(res.Header, cspHeader, nonce, kind, resourceURL)
+	patchOneHeader(res.Header, cspReportOnly, nonce, kind, resourceURL)
 
 	return nonce, nil
 }
 
-func patchOneHeader(h http.Header, key, nonce string, kind inlineKind) {
+func patchOneHeader(h http.Header, key, nonce string, kind tagKind, resourceURL string) {
 	lines := h.Values(key)
 	if len(lines) == 0 {
 		return
 	}
 
-	patchedLines, changed := patchPolicies(lines, nonce, kind)
+	patchedLines, changed := patchPolicies(lines, nonce, kind, resourceURL)
 	if changed {
 		h.Del(key)
 		for _, v := range patchedLines {
@@ -56,7 +55,7 @@ func patchOneHeader(h http.Header, key, nonce string, kind inlineKind) {
 	}
 }
 
-func patchPolicies(policies []string, nonce string, kind inlineKind) ([]string, bool) {
+func patchPolicies(policies []string, nonce string, kind tagKind, resourceURL string) ([]string, bool) {
 	if len(policies) == 0 {
 		return policies, false
 	}
@@ -85,20 +84,17 @@ func patchPolicies(policies []string, nonce string, kind inlineKind) ([]string, 
 			continue
 		}
 
-		if allowsInline(kind, bestValue) {
-			continue
+		var appendValue string
+		switch safeNonce(bestValue) {
+		case true:
+			appendValue = nonceToken
+		case false:
+			appendValue = resourceURL
 		}
 
-		var newValue string
-		switch bestValue {
-		case "'none'":
-			newValue = nonceToken
-		default:
-			newValue = bestValue + " " + nonceToken
-		}
-
+		newValue := appendToken(bestValue, appendValue)
 		rawDirs[bestIdx] = bestName + " " + newValue
-		policies[i] = strings.Join(rawDirs, ";")
+		policies[i] = strings.Join(rawDirs, "; ")
 		changed = true
 	}
 
@@ -131,33 +127,20 @@ func newCSPNonce() string {
 	return base64.StdEncoding.EncodeToString(b[:])
 }
 
-// allowsInline implements CSP3 "Does a source list allow all inline behavior for type?" algorithm.
-// True iff 'unsafe-inline' is present AND there is NO nonce/hash AND NO 'strict-dynamic'.
-//
-// Reference: https://www.w3.org/TR/CSP3/#allow-all-inline
-func allowsInline(kind inlineKind, sourceList string) bool {
-	sourceList = strings.TrimSpace(sourceList)
-	if sourceList == "" {
-		return false
-	}
-	tokens := strings.Fields(sourceList)
-
-	var unsafeInline bool
-	for _, t := range tokens {
-		switch t {
-		case "'unsafe-inline'":
-			unsafeInline = true
-		case "'strict-dynamic'":
-			if kind == InlineScript {
-				return false
-			}
-		default:
-			if isNonceOrHashSource(t) {
-				return false
-			}
+// safeNonce checks if it's safe to inject a nonce into the source list.
+func safeNonce(sourceList string) bool {
+	// - https://www.w3.org/TR/CSP3/#allow-all-inline
+	// - https://www.w3.org/TR/CSP3/#strict-dynamic-usage
+	var hasUnsafeInline bool
+	for _, t := range strings.Fields(sourceList) {
+		if isNonceOrHashSource(t) || t == "'strict-dynamic'" {
+			return true
+		}
+		if t == "'unsafe-inline'" {
+			hasUnsafeInline = true
 		}
 	}
-	return unsafeInline
+	return !hasUnsafeInline
 }
 
 func isNonceOrHashSource(t string) bool {
@@ -171,9 +154,17 @@ func isNonceOrHashSource(t string) bool {
 		strings.HasPrefix(inner, "sha512-")
 }
 
-func directivePriority(kind inlineKind, name string) int {
+func appendToken(sourceList, token string) string {
+	sourceList = strings.TrimSpace(sourceList)
+	if sourceList == "" || sourceList == "'none'" {
+		return token
+	}
+	return sourceList + " " + token
+}
+
+func directivePriority(kind tagKind, name string) int {
 	switch kind {
-	case InlineScript:
+	case Script:
 		switch name {
 		case "script-src-elem":
 			return 3
@@ -182,7 +173,7 @@ func directivePriority(kind inlineKind, name string) int {
 		case "default-src":
 			return 1
 		}
-	case InlineStyle:
+	case Style:
 		switch name {
 		case "style-src-elem":
 			return 3

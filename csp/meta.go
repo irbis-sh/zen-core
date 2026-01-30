@@ -12,7 +12,7 @@ import (
 )
 
 // patchMetaCSPs mutates HTML <meta> tags that define Content-Security-Policy.
-func patchMetaCSPs(res *http.Response, nonce string, kind inlineKind) error {
+func patchMetaCSPs(res *http.Response, nonce string, kind tagKind, resourceURL string) error {
 	if res.Body == nil || res.Body == http.NoBody {
 		return nil
 	}
@@ -55,8 +55,8 @@ func patchMetaCSPs(res *http.Response, nonce string, kind inlineKind) error {
 					continue
 				}
 
-				patched, ok := patchPolicies([]string{contentVal}, nonce, kind)
-				if !ok {
+				patched, changed := patchPolicies([]string{contentVal}, nonce, kind, resourceURL)
+				if !changed {
 					dst.Write(z.Raw())
 					continue
 				}
