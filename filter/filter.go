@@ -141,8 +141,8 @@ func NewFilter(networkRules networkRules, scriptletsInjector scriptletsInjector,
 const includeMaxDepth = 20
 
 // AddURL fetches a filter list from a URL, expands !#include directives, and adds rules to the filter.
-func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
-	if urlStr == "" {
+func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error {
+	if listURL == "" {
 		return errors.New("url is empty")
 	}
 
@@ -153,7 +153,7 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 		if len(line) == 0 || ignoreLineRegex.MatchString(line) {
 			return
 		}
-		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
+		if isException, err := f.addRule(line, &listName, listTrusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
 		} else {
 			countsMu.Lock()
@@ -175,14 +175,20 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 	parseURL = func(currentURL string, depth int) {
 		defer wg.Done()
 		if depth > includeMaxDepth {
-			log.Printf("include: max depth exceeded (%d): %q", includeMaxDepth, currentURL)
+			log.Printf("filter: max depth %d exceeded when adding %q", includeMaxDepth, currentURL)
+			return
+		}
+
+		base, err := url.Parse(currentURL)
+		if err != nil {
+			log.Printf("filter: error parsing url %q: %v", currentURL, err)
 			return
 		}
 
 		visitedMu.Lock()
 		if _, ok := visited[currentURL]; ok {
 			visitedMu.Unlock()
-			log.Printf("include: duplicate include skipped: %q", currentURL)
+			log.Printf("filter: duplicate include %q skipped", currentURL)
 			return
 		}
 		visited[currentURL] = struct{}{}
@@ -190,30 +196,23 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 
 		resp, err := f.client.Get(currentURL)
 		if err != nil {
-			log.Printf("include: fetch %q: %v", currentURL, err)
+			log.Printf("filter: error getting %q: %v", currentURL, err)
 			return
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			log.Printf("include: fetch %q: non-200 response: %s", currentURL, resp.Status)
-			return
-		}
-
-		base, err := url.Parse(currentURL)
-		if err != nil {
-			log.Printf("include: invalid base url %q: %v", currentURL, err)
+			log.Printf("filter: failed to fetch %q with non-200 response: %s", currentURL, resp.Status)
 			return
 		}
 
 		scanner := bufio.NewScanner(resp.Body)
-
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if after, ok := strings.CutPrefix(line, "!#include"); ok {
 				includeURL, err := resolveInclude(base, after)
 				if err != nil {
-					log.Printf("%v", err)
+					log.Printf("filter: error resolving include: %v", err)
 					continue
 				}
 
@@ -225,22 +224,22 @@ func (f *Filter) AddURL(name string, urlStr string, trusted bool) error {
 			addRuleLine(line)
 		}
 		if err := scanner.Err(); err != nil {
-			log.Printf("include: scan %q: %v", currentURL, err)
+			log.Printf("filter: error scanning %q: %v", currentURL, err)
 		}
 	}
 
 	wg.Add(1)
-	go parseURL(urlStr, 0)
+	go parseURL(listURL, 0)
 	wg.Wait()
 
-	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, name)
+	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, listName)
 	return nil
 }
 
 // AddReader parses the rules from the given reader and adds them to the filter.
-func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
+func (f *Filter) AddReader(listRules io.Reader, listName string, listTrusted bool) error {
 	var ruleCount, exceptionCount int
-	scanner := bufio.NewScanner(rules)
+	scanner := bufio.NewScanner(listRules)
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -248,7 +247,7 @@ func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 			continue
 		}
 
-		if isException, err := f.addRule(line, &name, trusted); err != nil { // nolint:revive
+		if isException, err := f.addRule(line, &listName, listTrusted); err != nil { // nolint:revive
 			// log.Printf("error adding rule: %v", err)
 		} else if isException {
 			exceptionCount++
@@ -260,7 +259,7 @@ func (f *Filter) AddReader(name string, trusted bool, rules io.Reader) error {
 		return err
 	}
 
-	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, name)
+	log.Printf("filter: added %d rules, %d exceptions from %s", ruleCount, exceptionCount, listName)
 	return nil
 }
 
