@@ -1,6 +1,7 @@
 package asset
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
 	"log"
@@ -80,6 +81,15 @@ func (s *Server) ListenAndServe() error {
 	}()
 
 	return nil
+}
+
+// Stop gracefully shuts down the HTTPS server.
+func (s *Server) Stop(ctx context.Context) error {
+	if s == nil || s.httpServer == nil {
+		return nil
+	}
+
+	return s.httpServer.Shutdown(ctx)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
