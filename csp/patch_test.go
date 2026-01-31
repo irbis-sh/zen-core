@@ -19,7 +19,9 @@ func TestPatchHeaders(t *testing.T) {
 		t.Parallel()
 
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
-		_, err := PatchHeaders(res, Script, resourceURL)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: resourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -35,7 +37,9 @@ func TestPatchHeaders(t *testing.T) {
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 		res.Header.Add("Content-Security-Policy", "script-src 'self'")
 
-		nonce, err := PatchHeaders(res, Script, testResourceURL)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -54,7 +58,9 @@ func TestPatchHeaders(t *testing.T) {
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 		res.Header.Add("Content-Security-Policy", "script-src 'unsafe-inline'")
 
-		nonce, err := PatchHeaders(res, Script, testResourceURL)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -74,7 +80,9 @@ func TestPatchHeaders(t *testing.T) {
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 		res.Header.Add("Content-Security-Policy", "script-src-elem 'none'")
 
-		nonce, err := PatchHeaders(res, Script, testResourceURL)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -120,7 +128,9 @@ func TestPatchHeaders_NoncePriority_Script(t *testing.T) {
 			res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 			res.Header.Add("Content-Security-Policy", tc.cspLine)
 
-			nonce, err := PatchHeaders(res, Script, "https://assets.example/one.js")
+			nonce := NewNonce()
+			ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: "https://assets.example/one.js"}}
+			err := PatchHeadersBatch(res, ops)
 			if err != nil {
 				t.Fatalf("patch headers: %v", err)
 			}
@@ -161,7 +171,9 @@ func TestPatchHeaders_NoncePriority_Style(t *testing.T) {
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 		res.Header.Add("Content-Security-Policy", tc.cspLine)
 
-		nonce, err := PatchHeaders(res, Style, "https://assets.example/one.css")
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Style, ResourceURL: "https://assets.example/one.css"}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -193,7 +205,9 @@ func TestPatchHeaders_Meta(t *testing.T) {
 		}
 		res.Header.Set("Content-Type", "text/html; charset=utf-8")
 
-		nonce, err := PatchHeaders(res, Script, testResourceURL)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -223,7 +237,9 @@ func TestPatchHeaders_Meta(t *testing.T) {
 		res.Header.Set("Content-Type", "text/html; charset=utf-8")
 		res.Header.Add("Content-Security-Policy", "script-src 'none'")
 
-		nonce, err := PatchHeaders(res, Script, testResourceURL)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
