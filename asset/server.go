@@ -53,7 +53,7 @@ func NewServer(port int, engine *Engine, certGenerator certGenerator) (*Server, 
 	return s, nil
 }
 
-// ListenAndServe starts the HTTPS server and blocks.
+// ListenAndServe starts the HTTPS server and begins listening for requests.
 func (s *Server) ListenAndServe() error {
 	tlsConfig := &tls.Config{
 		GetCertificate: func(*tls.ClientHelloInfo) (*tls.Certificate, error) {
