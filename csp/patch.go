@@ -103,10 +103,9 @@ func patchPolicies(policies []string, nonce string, kind tagKind, resourceURL st
 		}
 
 		var appendValue string
-		switch safeNonce(bestValue) {
-		case true:
+		if safeNonce(bestValue) {
 			appendValue = nonceToken
-		case false:
+		} else {
 			appendValue = resourceURL
 		}
 
