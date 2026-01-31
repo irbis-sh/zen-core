@@ -119,24 +119,24 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		kind        AssetKind
+		kind        Kind
 		contentType string
 	)
 	switch r.URL.Path {
 	case cosmeticCSSPath:
-		kind = AssetCosmeticCSS
+		kind = CosmeticCSS
 		contentType = "text/css; charset=utf-8"
 	case cssRulePath:
-		kind = AssetCSSRule
+		kind = CSSRule
 		contentType = "text/css; charset=utf-8"
 	case scriptletsPath:
-		kind = AssetScriptlets
+		kind = Scriptlets
 		contentType = "application/javascript; charset=utf-8"
 	case extendedCSSPath:
-		kind = AssetExtendedCSS
+		kind = ExtendedCSS
 		contentType = "application/javascript; charset=utf-8"
 	case jsRulePath:
-		kind = AssetJSRule
+		kind = JSRule
 		contentType = "application/javascript; charset=utf-8"
 	default:
 		w.WriteHeader(http.StatusNotFound)
