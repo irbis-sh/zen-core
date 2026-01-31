@@ -104,18 +104,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var refererURL *url.URL
 	raw := r.Referer()
 	if raw == "" {
 		http.Error(w, "missing referer", http.StatusBadRequest)
 		return
 	}
-	if parsed, err := url.Parse(raw); err != nil {
+	refererURL, err := url.Parse(raw)
+	if err != nil {
 		log.Printf("assetserver: invalid referer URL %q: %v", raw, err)
 		http.Error(w, "invalid referer", http.StatusBadRequest)
 		return
-	} else {
-		refererURL = parsed
 	}
 
 	var (
