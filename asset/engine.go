@@ -25,14 +25,14 @@ const (
 	jsRulePath      = "/jsrule.js"
 )
 
-type Kind int
+type kind int
 
 const (
-	Scriptlets Kind = iota
-	JSRule
-	ExtendedCSS
-	CosmeticCSS
-	CSSRule
+	scriptlets kind = iota
+	jsRule
+	extendedCSS
+	cosmeticCSS
+	cssRule
 )
 
 // Engine handles rule ingestion, HTML injection, and asset resolution.
@@ -146,26 +146,26 @@ func (e *Engine) Inject(_ *http.Request, res *http.Response) error {
 	return nil
 }
 
-// AssetBytes returns the asset content for a hostname and kind.
-func (e *Engine) AssetBytes(hostname string, kind Kind) ([]byte, error) {
+// assetBytes returns the asset content for a hostname and kind.
+func (e *Engine) assetBytes(hostname string, kind kind) ([]byte, error) {
 	switch kind {
-	case CosmeticCSS:
+	case cosmeticCSS:
 		return e.cosmetic.GetAsset(hostname), nil
-	case CSSRule:
+	case cssRule:
 		return e.cssRules.GetAsset(hostname), nil
-	case Scriptlets:
+	case scriptlets:
 		body, err := e.scriptlets.GetAsset(hostname)
 		if err != nil {
 			return nil, fmt.Errorf("scriptlets asset: %w", err)
 		}
 		return body, nil
-	case ExtendedCSS:
+	case extendedCSS:
 		body, err := e.extendedCSS.GetAsset(hostname)
 		if err != nil {
 			return nil, fmt.Errorf("extended CSS asset: %w", err)
 		}
 		return body, nil
-	case JSRule:
+	case jsRule:
 		body, err := e.jsRules.GetAsset(hostname)
 		if err != nil {
 			return nil, fmt.Errorf("js rules: %w", err)

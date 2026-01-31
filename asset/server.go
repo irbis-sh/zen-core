@@ -117,31 +117,31 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		kind        Kind
+		kind        kind
 		contentType string
 	)
 	switch r.URL.Path {
 	case cosmeticCSSPath:
-		kind = CosmeticCSS
+		kind = cosmeticCSS
 		contentType = "text/css; charset=utf-8"
 	case cssRulePath:
-		kind = CSSRule
+		kind = cssRule
 		contentType = "text/css; charset=utf-8"
 	case scriptletsPath:
-		kind = Scriptlets
+		kind = scriptlets
 		contentType = "application/javascript; charset=utf-8"
 	case extendedCSSPath:
-		kind = ExtendedCSS
+		kind = extendedCSS
 		contentType = "application/javascript; charset=utf-8"
 	case jsRulePath:
-		kind = JSRule
+		kind = jsRule
 		contentType = "application/javascript; charset=utf-8"
 	default:
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 
-	body, err := s.engine.AssetBytes(refererURL.Hostname(), kind)
+	body, err := s.engine.assetBytes(refererURL.Hostname(), kind)
 	if err != nil {
 		log.Printf("assetserver: failed to resolve asset %q: %v", r.URL.Path, err)
 		http.Error(w, "asset resolution error", http.StatusInternalServerError)
