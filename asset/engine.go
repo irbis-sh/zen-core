@@ -114,7 +114,7 @@ func (e *Engine) AddRule(rule string, filterListTrusted bool) (handled bool, err
 }
 
 // Inject appends asset tags for the matching hostname into HTML responses.
-func (e *Engine) Inject(req *http.Request, res *http.Response) error {
+func (e *Engine) Inject(_ *http.Request, res *http.Response) error {
 	scriptletsNonce := csp.NewNonce()
 	jsRuleNonce := csp.NewNonce()
 	extendedCSSNonce := csp.NewNonce()
