@@ -44,6 +44,9 @@ func (hm *HostMatcher[T]) AddPrimaryRule(hostnamePatterns string, data T) error 
 		if pattern[0] == '~' {
 			pattern = pattern[1:]
 			hm.exceptionStore.Add(pattern, data)
+			if !strings.HasPrefix(pattern, "*.") {
+				hm.exceptionStore.Add("*."+pattern, data)
+			}
 			continue
 		}
 
