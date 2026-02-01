@@ -28,7 +28,6 @@ type PatchOperation struct {
 }
 
 // PatchHeadersBatch mutates CSP headers and meta tags for multiple resources in a single pass.
-// Returns the generated patch operations with nonces to place on elements.
 func PatchHeadersBatch(res *http.Response, operations []PatchOperation) error {
 	if res == nil || len(operations) == 0 {
 		return nil
