@@ -6,7 +6,7 @@ import (
 	"log"
 	"regexp"
 
-	"github.com/ZenPrivacy/zen-core/hostmatch"
+	"github.com/ZenPrivacy/zen-core/internal/hostmatch"
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
