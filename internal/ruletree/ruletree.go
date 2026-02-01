@@ -38,7 +38,9 @@ func New[T Data]() *Tree[T] {
 // Insert adds a pattern with associated data to the tree.
 func (t *Tree[T]) Insert(pattern string, v T) {
 	if pattern == "" {
+		t.insertMu.Lock()
 		t.generic = append(t.generic, v)
+		t.insertMu.Unlock()
 		return
 	}
 
