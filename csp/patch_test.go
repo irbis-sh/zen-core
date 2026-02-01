@@ -8,14 +8,20 @@ import (
 	"testing"
 )
 
+const testResourceURL = "https://assets.example/resource.js"
+
 func TestPatchHeaders(t *testing.T) {
 	t.Parallel()
+
+	resourceURL := testResourceURL
 
 	t.Run("does not create CSP header when none is present", func(t *testing.T) {
 		t.Parallel()
 
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
-		_, err := PatchHeaders(res, InlineScript)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: resourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -29,13 +35,42 @@ func TestPatchHeaders(t *testing.T) {
 		t.Parallel()
 
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
-		nonce, err := PatchHeaders(res, InlineScript)
+		res.Header.Add("Content-Security-Policy", "script-src 'self'")
+
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
 
 		if nonce == "" {
 			t.Fatalf("nonce cannot be empty")
+		}
+		if !dirHasNonce(res.Header, "script-src", nonce) {
+			t.Fatalf("expected header to contain nonce; header: %s", res.Header.Get("Content-Security-Policy"))
+		}
+	})
+
+	t.Run("adds URL when 'unsafe-inline' is present", func(t *testing.T) {
+		t.Parallel()
+
+		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
+		res.Header.Add("Content-Security-Policy", "script-src 'unsafe-inline'")
+
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
+		if err != nil {
+			t.Fatalf("patch headers: %v", err)
+		}
+		if nonce == "" {
+			t.Fatalf("nonce cannot be empty")
+		}
+
+		got := res.Header.Get("Content-Security-Policy")
+		if !strings.Contains(got, testResourceURL) {
+			t.Fatalf("expected header to contain resource URL; header: %s", got)
 		}
 	})
 
@@ -45,7 +80,9 @@ func TestPatchHeaders(t *testing.T) {
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 		res.Header.Add("Content-Security-Policy", "script-src-elem 'none'")
 
-		nonce, err := PatchHeaders(res, InlineScript)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -91,7 +128,9 @@ func TestPatchHeaders_NoncePriority_Script(t *testing.T) {
 			res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 			res.Header.Add("Content-Security-Policy", tc.cspLine)
 
-			nonce, err := PatchHeaders(res, InlineScript)
+			nonce := NewNonce()
+			ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: "https://assets.example/one.js"}}
+			err := PatchHeadersBatch(res, ops)
 			if err != nil {
 				t.Fatalf("patch headers: %v", err)
 			}
@@ -132,7 +171,9 @@ func TestPatchHeaders_NoncePriority_Style(t *testing.T) {
 		res := &http.Response{Header: http.Header{}, Body: http.NoBody}
 		res.Header.Add("Content-Security-Policy", tc.cspLine)
 
-		nonce, err := PatchHeaders(res, InlineStyle)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Style, ResourceURL: "https://assets.example/one.css"}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -164,7 +205,9 @@ func TestPatchHeaders_Meta(t *testing.T) {
 		}
 		res.Header.Set("Content-Type", "text/html; charset=utf-8")
 
-		nonce, err := PatchHeaders(res, InlineScript)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}
@@ -194,7 +237,9 @@ func TestPatchHeaders_Meta(t *testing.T) {
 		res.Header.Set("Content-Type", "text/html; charset=utf-8")
 		res.Header.Add("Content-Security-Policy", "script-src 'none'")
 
-		nonce, err := PatchHeaders(res, InlineScript)
+		nonce := NewNonce()
+		ops := []PatchOperation{{Nonce: nonce, Kind: Script, ResourceURL: testResourceURL}}
+		err := PatchHeadersBatch(res, ops)
 		if err != nil {
 			t.Fatalf("patch headers: %v", err)
 		}

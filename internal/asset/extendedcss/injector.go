@@ -3,17 +3,14 @@ package extendedcss
 import (
 	"bytes"
 	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"html/template"
 	"log"
-	"net/http"
 	"regexp"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/csp"
 	"github.com/ZenPrivacy/zen-core/hostmatch"
-	"github.com/ZenPrivacy/zen-core/httprewrite"
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
@@ -23,8 +20,6 @@ var (
 
 	//go:embed bundle.js
 	defaultExtendedCSSBundle []byte
-
-	injectionTmp = template.Must(template.New("injection").Parse(`<script{{if .Nonce}} nonce="{{.Nonce}}"{{end}}>{{.Bundle}}(()=>{window.extendedCSS("{{.Rules}}")})();</script>`))
 )
 
 type store interface {
@@ -36,7 +31,7 @@ type store interface {
 // Injector injects extended CSS rules into HTML HTTP responses.
 type Injector struct {
 	// bundle contains the extended CSS JS bundle.
-	bundle template.JS
+	bundle []byte
 	// store stores and retrieves extended CSS rules by hostname.
 	store store
 }
@@ -55,7 +50,7 @@ func newInjector(bundleData []byte, store store) (*Injector, error) {
 	}
 
 	return &Injector{
-		bundle: template.JS(bundleData), // #nosec G203 -- bundleData comes from a trusted source
+		bundle: bundleData,
 		store:  store,
 	}, nil
 }
@@ -80,39 +75,25 @@ func (inj *Injector) AddRule(rule string) error {
 	return errors.New("unknown rule format")
 }
 
-// Inject injects extended-css rules into a given HTTP HTML response.
-//
-// On error, the caller may proceed as if the function had not been called.
-func (inj *Injector) Inject(req *http.Request, res *http.Response) error {
-	hostname := req.URL.Hostname()
+// GetAsset returns the JS asset for the given hostname.
+func (inj *Injector) GetAsset(hostname string) ([]byte, error) {
 	rules := inj.store.Get(hostname)
 	log.Printf("got %d extended-css rules for %q", len(rules), redacted.Redacted(hostname))
 	if len(rules) == 0 {
-		return nil
+		return nil, nil
 	}
 
-	nonce, err := csp.PatchHeaders(res, csp.InlineScript)
+	joined := strings.Join(rules, "\n")
+	encodedRules, err := json.Marshal(joined)
 	if err != nil {
-		return fmt.Errorf("patch CSP headers: %v", err)
+		return nil, fmt.Errorf("encode rules: %v", err)
 	}
 
 	var injection bytes.Buffer
-	err = injectionTmp.Execute(&injection, struct {
-		Nonce  string
-		Bundle template.JS
-		Rules  string
-	}{
-		Nonce:  nonce,
-		Bundle: inj.bundle,
-		Rules:  strings.Join(rules, "\n"),
-	})
-	if err != nil {
-		return fmt.Errorf("execute template: %v", err)
-	}
+	injection.Write(inj.bundle)
+	injection.WriteString("\n(()=>{window.extendedCSS(")
+	injection.Write(encodedRules)
+	injection.WriteString(")})();")
 
-	if err := httprewrite.AppendHTMLHeadContents(res, injection.Bytes()); err != nil {
-		return fmt.Errorf("append head contents: %v", err)
-	}
-
-	return nil
+	return injection.Bytes(), nil
 }

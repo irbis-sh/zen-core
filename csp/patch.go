@@ -13,41 +13,57 @@ const (
 	cspReportOnly = "Content-Security-Policy-Report-Only"
 )
 
-type inlineKind int
+type tagKind int
 
 const (
-	InlineScript inlineKind = iota
-	InlineStyle
+	Script tagKind = iota
+	Style
 )
 
-// PatchHeaders mutates CSP headers and meta tags so an inline <script> or <style>
-// element can run. Returns the nonce to place on the inline tag.
-// The nonce is safe to inject unconditionally.
-func PatchHeaders(res *http.Response, kind inlineKind) (string, error) {
-	if res == nil {
-		return "", nil
-	}
-
-	nonce := newCSPNonce()
-
-	err := patchMetaCSPs(res, nonce, kind)
-	if err != nil {
-		return "", fmt.Errorf("patch meta CSP: %w", err)
-	}
-
-	patchOneHeader(res.Header, cspHeader, nonce, kind)
-	patchOneHeader(res.Header, cspReportOnly, nonce, kind)
-
-	return nonce, nil
+// PatchOperation represents a single CSP patch with its nonce and target resource.
+type PatchOperation struct {
+	Nonce       string
+	Kind        tagKind
+	ResourceURL string
 }
 
-func patchOneHeader(h http.Header, key, nonce string, kind inlineKind) {
+// PatchHeadersBatch mutates CSP headers and meta tags for multiple resources in a single pass.
+func PatchHeadersBatch(res *http.Response, operations []PatchOperation) error {
+	if res == nil || len(operations) == 0 {
+		return nil
+	}
+
+	for _, op := range operations {
+		patchOneHeader(res.Header, cspHeader, op.Nonce, op.Kind, op.ResourceURL)
+		patchOneHeader(res.Header, cspReportOnly, op.Nonce, op.Kind, op.ResourceURL)
+	}
+
+	err := patchMetaCSPsBatch(res, operations)
+	if err != nil {
+		return fmt.Errorf("patch meta CSP: %w", err)
+	}
+
+	return nil
+}
+
+// NewNonce generates a cryptographically random nonce for CSP.
+func NewNonce() string {
+	// From https://www.w3.org/TR/CSP3/#security-nonces:
+	// The generated value SHOULD be at least 128 bits long (before encoding), and
+	// SHOULD be generated via a cryptographically secure random number generator in order to ensure that the value is difficult for an attacker to predict.
+	// The code below satisfies both of these requirements.
+	var b [18]byte // 144 bits
+	rand.Read(b[:])
+	return base64.StdEncoding.EncodeToString(b[:])
+}
+
+func patchOneHeader(h http.Header, key, nonce string, kind tagKind, resourceURL string) {
 	lines := h.Values(key)
 	if len(lines) == 0 {
 		return
 	}
 
-	patchedLines, changed := patchPolicies(lines, nonce, kind)
+	patchedLines, changed := patchPolicies(lines, nonce, kind, resourceURL)
 	if changed {
 		h.Del(key)
 		for _, v := range patchedLines {
@@ -56,7 +72,7 @@ func patchOneHeader(h http.Header, key, nonce string, kind inlineKind) {
 	}
 }
 
-func patchPolicies(policies []string, nonce string, kind inlineKind) ([]string, bool) {
+func patchPolicies(policies []string, nonce string, kind tagKind, resourceURL string) ([]string, bool) {
 	if len(policies) == 0 {
 		return policies, false
 	}
@@ -85,20 +101,16 @@ func patchPolicies(policies []string, nonce string, kind inlineKind) ([]string, 
 			continue
 		}
 
-		if allowsInline(kind, bestValue) {
-			continue
+		var appendValue string
+		if safeNonce(bestValue) {
+			appendValue = nonceToken
+		} else {
+			appendValue = resourceURL
 		}
 
-		var newValue string
-		switch bestValue {
-		case "'none'":
-			newValue = nonceToken
-		default:
-			newValue = bestValue + " " + nonceToken
-		}
-
+		newValue := appendToken(bestValue, appendValue)
 		rawDirs[bestIdx] = bestName + " " + newValue
-		policies[i] = strings.Join(rawDirs, ";")
+		policies[i] = strings.Join(rawDirs, "; ")
 		changed = true
 	}
 
@@ -120,44 +132,20 @@ func cutDirective(s string) (string, string) {
 	return strings.ToLower(name), strings.TrimSpace(rest)
 }
 
-// newCSPNonce returns a cryptographically random base64 string.
-func newCSPNonce() string {
-	// From https://www.w3.org/TR/CSP3/#security-nonces:
-	// The generated value SHOULD be at least 128 bits long (before encoding), and
-	// SHOULD be generated via a cryptographically secure random number generator in order to ensure that the value is difficult for an attacker to predict.
-	// The code below satisfies both of these requirements.
-	var b [18]byte // 144 bits
-	rand.Read(b[:])
-	return base64.StdEncoding.EncodeToString(b[:])
-}
-
-// allowsInline implements CSP3 "Does a source list allow all inline behavior for type?" algorithm.
-// True iff 'unsafe-inline' is present AND there is NO nonce/hash AND NO 'strict-dynamic'.
-//
-// Reference: https://www.w3.org/TR/CSP3/#allow-all-inline
-func allowsInline(kind inlineKind, sourceList string) bool {
-	sourceList = strings.TrimSpace(sourceList)
-	if sourceList == "" {
-		return false
-	}
-	tokens := strings.Fields(sourceList)
-
-	var unsafeInline bool
-	for _, t := range tokens {
-		switch t {
-		case "'unsafe-inline'":
-			unsafeInline = true
-		case "'strict-dynamic'":
-			if kind == InlineScript {
-				return false
-			}
-		default:
-			if isNonceOrHashSource(t) {
-				return false
-			}
+// safeNonce checks if it's safe to inject a nonce into the source list.
+func safeNonce(sourceList string) bool {
+	// - https://www.w3.org/TR/CSP3/#allow-all-inline
+	// - https://www.w3.org/TR/CSP3/#strict-dynamic-usage
+	var hasUnsafeInline bool
+	for _, t := range strings.Fields(sourceList) {
+		if isNonceOrHashSource(t) || t == "'strict-dynamic'" {
+			return true
+		}
+		if t == "'unsafe-inline'" {
+			hasUnsafeInline = true
 		}
 	}
-	return unsafeInline
+	return !hasUnsafeInline
 }
 
 func isNonceOrHashSource(t string) bool {
@@ -171,9 +159,17 @@ func isNonceOrHashSource(t string) bool {
 		strings.HasPrefix(inner, "sha512-")
 }
 
-func directivePriority(kind inlineKind, name string) int {
+func appendToken(sourceList, token string) string {
+	sourceList = strings.TrimSpace(sourceList)
+	if sourceList == "" || sourceList == "'none'" {
+		return token
+	}
+	return sourceList + " " + token
+}
+
+func directivePriority(kind tagKind, name string) int {
 	switch kind {
-	case InlineScript:
+	case Script:
 		switch name {
 		case "script-src-elem":
 			return 3
@@ -182,7 +178,7 @@ func directivePriority(kind inlineKind, name string) int {
 		case "default-src":
 			return 1
 		}
-	case InlineStyle:
+	case Style:
 		switch name {
 		case "style-src-elem":
 			return 3

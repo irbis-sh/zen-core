@@ -6,11 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/http"
 
-	"github.com/ZenPrivacy/zen-core/csp"
 	"github.com/ZenPrivacy/zen-core/hostmatch"
-	"github.com/ZenPrivacy/zen-core/httprewrite"
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
@@ -53,41 +50,23 @@ func newInjector(bundleData []byte, store store) (*Injector, error) {
 	}, nil
 }
 
-// Inject injects scriptlets into a given HTTP HTML response.
-//
-// On error, the caller may proceed as if the function had not been called.
-func (inj *Injector) Inject(req *http.Request, res *http.Response) error {
-	hostname := req.URL.Hostname()
+// GetAsset returns the scriptlet injection asset for the given hostname.
+func (inj *Injector) GetAsset(hostname string) ([]byte, error) {
 	argLists := inj.store.Get(hostname)
 	log.Printf("got %d scriptlets for %q", len(argLists), redacted.Redacted(hostname))
 	if len(argLists) == 0 {
-		return nil
-	}
-
-	nonce, err := csp.PatchHeaders(res, csp.InlineScript)
-	if err != nil {
-		return fmt.Errorf("patch CSP headers: %w", err)
+		return nil, nil
 	}
 
 	var injection bytes.Buffer
-	injection.WriteString(`<script nonce="`)
-	injection.WriteString(nonce)
-	injection.WriteString(`">`)
 	injection.Write(inj.bundle)
 	injection.WriteString("(()=>{")
 	for _, argLst := range argLists {
 		if err := argLst.GenerateInjection(&injection); err != nil {
-			return fmt.Errorf("generate injection for scriptlet %q: %v", argLst, err)
+			return nil, fmt.Errorf("generate injection for scriptlet %q: %v", argLst, err)
 		}
 	}
-	injection.WriteString("})();</script>")
+	injection.WriteString("})();")
 
-	// Appending the scriptlets bundle to the head of the document aligns with the behavior of uBlock Origin:
-	// - https://github.com/gorhill/uBlock/blob/d7ae3a185eddeae0f12d07149c1f0ddd11fd0c47/platform/firefox/vapi-background-ext.js#L373-L375
-	// - https://github.com/gorhill/uBlock/blob/d7ae3a185eddeae0f12d07149c1f0ddd11fd0c47/platform/chromium/vapi-background-ext.js#L223-L226
-	if err := httprewrite.AppendHTMLHeadContents(res, injection.Bytes()); err != nil {
-		return fmt.Errorf("append head contents: %w", err)
-	}
-
-	return nil
+	return injection.Bytes(), nil
 }
