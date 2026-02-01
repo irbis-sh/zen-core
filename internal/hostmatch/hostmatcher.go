@@ -3,6 +3,7 @@ package hostmatch
 import (
 	"errors"
 	"strings"
+	"sync"
 )
 
 var (
@@ -14,11 +15,15 @@ type hostnameStore[T any] interface {
 	Get(hostname string) []T
 }
 
+// HostMatcher matches rules against hostnames, supporting wildcards and exceptions.
+// It is safe for concurrent use.
 type HostMatcher[T comparable] struct {
-	primaryStore      hostnameStore[T]
+	// mu protects generic and genericExceptions slices.
+	mu                sync.RWMutex
 	generic           []T
-	exceptionStore    hostnameStore[T]
 	genericExceptions []T
+	primaryStore      hostnameStore[T]
+	exceptionStore    hostnameStore[T]
 }
 
 func NewHostMatcher[T comparable]() *HostMatcher[T] {
@@ -30,7 +35,9 @@ func NewHostMatcher[T comparable]() *HostMatcher[T] {
 
 func (hm *HostMatcher[T]) AddPrimaryRule(hostnamePatterns string, data T) error {
 	if len(hostnamePatterns) == 0 {
+		hm.mu.Lock()
 		hm.generic = append(hm.generic, data)
+		hm.mu.Unlock()
 		return nil
 	}
 
@@ -44,6 +51,9 @@ func (hm *HostMatcher[T]) AddPrimaryRule(hostnamePatterns string, data T) error 
 		if pattern[0] == '~' {
 			pattern = pattern[1:]
 			hm.exceptionStore.Add(pattern, data)
+			if !strings.HasPrefix(pattern, "*.") {
+				hm.exceptionStore.Add("*."+pattern, data)
+			}
 			continue
 		}
 
@@ -58,7 +68,9 @@ func (hm *HostMatcher[T]) AddPrimaryRule(hostnamePatterns string, data T) error 
 
 func (hm *HostMatcher[T]) AddExceptionRule(hostnamePatterns string, data T) error {
 	if len(hostnamePatterns) == 0 {
-		hm.generic = append(hm.generic, data)
+		hm.mu.Lock()
+		hm.genericExceptions = append(hm.genericExceptions, data)
+		hm.mu.Unlock()
 		return nil
 	}
 
@@ -80,6 +92,9 @@ func (hm *HostMatcher[T]) AddExceptionRule(hostnamePatterns string, data T) erro
 func (hm *HostMatcher[T]) Get(hostname string) []T {
 	primary := hm.primaryStore.Get(hostname)
 	exceptions := hm.exceptionStore.Get(hostname)
+
+	hm.mu.RLock()
+	defer hm.mu.RUnlock()
 
 	if len(hm.genericExceptions) == 0 && len(exceptions) == 0 {
 		// Optimize the most common case.

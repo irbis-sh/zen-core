@@ -3,7 +3,7 @@ package hostmatch_test
 import (
 	"testing"
 
-	"github.com/ZenPrivacy/zen-core/hostmatch"
+	"github.com/ZenPrivacy/zen-core/internal/hostmatch"
 )
 
 func TestHostMatcherPublic(t *testing.T) {
@@ -120,6 +120,35 @@ func TestHostMatcherPublic(t *testing.T) {
 
 		if res := hm.Get("example.com"); len(res) == 0 || res[0] != "test" {
 			t.Errorf("expected result for example.com to be 'test', got %v", res)
+		}
+	})
+
+	t.Run("generic exception rule neutralizes generic primary rule", func(t *testing.T) {
+		t.Parallel()
+
+		hm := hostmatch.NewHostMatcher[string]()
+		if err := hm.AddPrimaryRule("", "test"); err != nil {
+			t.Fatalf("failed to add rule: %v", err)
+		}
+		if err := hm.AddExceptionRule("", "test"); err != nil {
+			t.Fatalf("failed to add exception rule: %v", err)
+		}
+
+		if res := hm.Get("example.com"); len(res) != 0 {
+			t.Errorf("expected result to be empty, got %v", res)
+		}
+	})
+
+	t.Run("tilde exception neutralizes deep subdomains", func(t *testing.T) {
+		t.Parallel()
+
+		hm := hostmatch.NewHostMatcher[string]()
+		if err := hm.AddPrimaryRule("example.com,~sub.example.com", "test"); err != nil {
+			t.Fatalf("failed to add rule: %v", err)
+		}
+
+		if res := hm.Get("deep.sub.example.com"); len(res) != 0 {
+			t.Errorf("expected result for deep.sub.example.com to be empty, got %v", res)
 		}
 	})
 }
