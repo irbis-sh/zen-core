@@ -24,8 +24,8 @@ type filterEventsEmitter interface {
 	OnFilterModify(method, url, referer string, rules []rule.Rule)
 }
 
-type httpClient interface {
-	Get(url string) (*http.Response, error)
+type filterListStore interface {
+	Get(url string) (io.ReadCloser, error)
 }
 
 type networkRules interface {
@@ -52,11 +52,11 @@ type whitelistSrv interface {
 //
 // Safe for concurrent use.
 type Filter struct {
-	networkRules  networkRules
-	injector      documentInjector
-	client        httpClient
-	eventsEmitter filterEventsEmitter
-	whitelistSrv  whitelistSrv
+	networkRules    networkRules
+	injector        documentInjector
+	filterListStore filterListStore
+	eventsEmitter   filterEventsEmitter
+	whitelistSrv    whitelistSrv
 }
 
 var (
@@ -65,7 +65,7 @@ var (
 )
 
 // NewFilter creates and initializes a new filter.
-func NewFilter(networkRules networkRules, injector documentInjector, client httpClient, eventsEmitter filterEventsEmitter, whitelistSrv whitelistSrv) (*Filter, error) {
+func NewFilter(networkRules networkRules, injector documentInjector, filterListStore filterListStore, eventsEmitter filterEventsEmitter, whitelistSrv whitelistSrv) (*Filter, error) {
 	if eventsEmitter == nil {
 		return nil, errors.New("eventsEmitter is nil")
 	}
@@ -75,19 +75,19 @@ func NewFilter(networkRules networkRules, injector documentInjector, client http
 	if injector == nil {
 		return nil, errors.New("injector is nil")
 	}
-	if client == nil {
-		return nil, errors.New("client is nil")
+	if filterListStore == nil {
+		return nil, errors.New("filterListStore is nil")
 	}
 	if whitelistSrv == nil {
 		return nil, errors.New("whitelistSrv is nil")
 	}
 
 	f := &Filter{
-		networkRules:  networkRules,
-		injector:      injector,
-		eventsEmitter: eventsEmitter,
-		whitelistSrv:  whitelistSrv,
-		client:        client,
+		networkRules:    networkRules,
+		injector:        injector,
+		eventsEmitter:   eventsEmitter,
+		whitelistSrv:    whitelistSrv,
+		filterListStore: filterListStore,
 	}
 
 	return f, nil
@@ -149,19 +149,14 @@ func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error
 		visited[currentURL] = struct{}{}
 		visitedMu.Unlock()
 
-		resp, err := f.client.Get(currentURL)
+		contents, err := f.filterListStore.Get(currentURL)
 		if err != nil {
-			log.Printf("filter: error getting %q: %v", currentURL, err)
+			log.Printf("failed to get filter list %q from store: %v", currentURL, err)
 			return
 		}
-		defer resp.Body.Close()
+		defer contents.Close()
 
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("filter: failed to fetch %q with non-200 response: %s", currentURL, resp.Status)
-			return
-		}
-
-		scanner := bufio.NewScanner(resp.Body)
+		scanner := bufio.NewScanner(contents)
 		for scanner.Scan() {
 			line := strings.TrimSpace(scanner.Text())
 			if after, ok := strings.CutPrefix(line, "!#include"); ok {
