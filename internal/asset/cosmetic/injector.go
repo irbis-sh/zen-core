@@ -78,7 +78,7 @@ func generateBatchedCSS(selectors []string) string {
 		batch := selectors[i:end]
 
 		joinedSelectors := strings.Join(batch, ",")
-		builder.WriteString(fmt.Sprintf("%s{display:none!important;}", joinedSelectors))
+		fmt.Fprintf(&builder, "%s{display:none!important;}", joinedSelectors)
 	}
 
 	return builder.String()
