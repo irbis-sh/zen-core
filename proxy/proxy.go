@@ -139,7 +139,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request) {
 	filterResp, err := p.filter.HandleRequest(r)
 	if err != nil {
-		log.Printf("error handling request for %q: %v", redacted.Redacted(r.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
+		log.Printf("error handling request for %q: %v", redacted.Redacted(r.URL), err)
 	}
 
 	if filterResp != nil {
@@ -159,7 +159,7 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := p.requestClient.Do(r) // #nosec G704 -- this is a proxy; forwarding requests is its purpose
 	if err != nil {
-		log.Printf("error making request: %v", redacted.Redacted(err)) // #nosec G706 -- sanitized by redacted.Redacted; the error might contain information about the hostname we are connecting to.
+		log.Printf("error making request: %v", redacted.Redacted(err)) // The error might contain information about the hostname we are connecting to.
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -193,14 +193,14 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
-		log.Printf("hijacking connection(%s): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+		log.Printf("hijacking connection(%s): %v", redacted.Redacted(connReq.Host), err)
 		return
 	}
 	defer clientConn.Close()
 
 	host, _, err := net.SplitHostPort(connReq.Host)
 	if err != nil {
-		log.Printf("splitting host and port(%s): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+		log.Printf("splitting host and port(%s): %v", redacted.Redacted(connReq.Host), err)
 		return
 	}
 
@@ -213,12 +213,12 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 
 	tlsCert, err := p.certGenerator.GetCertificate(host)
 	if err != nil {
-		log.Printf("getting certificate(%s): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+		log.Printf("getting certificate(%s): %v", redacted.Redacted(connReq.Host), err)
 		return
 	}
 
 	if _, err := clientConn.Write([]byte("HTTP/1.1 200 OK\r\n\r\n")); err != nil {
-		log.Printf("writing 200 OK to client(%s): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+		log.Printf("writing 200 OK to client(%s): %v", redacted.Redacted(connReq.Host), err)
 		return
 	}
 
@@ -240,7 +240,7 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 
 				msg := err.Error()
 				if strings.Contains(msg, "tls: ") {
-					log.Printf("adding %s to ignored hosts", redacted.Redacted(host)) // #nosec G706 -- sanitized by redacted.Redacted
+					log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
 					p.addTransparentHost(host)
 				}
 
@@ -249,7 +249,7 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 				// decides it no longer needs the connection to the host.
 				// To avoid excessive noise in the logs, we suppress these messages.
 				if !strings.HasSuffix(msg, "connection reset by peer") && !strings.HasSuffix(msg, "An existing connection was forcibly closed by the remote host.") {
-					log.Printf("reading request(%s): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+					log.Printf("reading request(%s): %v", redacted.Redacted(connReq.Host), err)
 				}
 			}
 			break
@@ -270,19 +270,19 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 
 		filterResp, err := p.filter.HandleRequest(req)
 		if err != nil {
-			log.Printf("handling request for %q: %v", redacted.Redacted(req.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
+			log.Printf("handling request for %q: %v", redacted.Redacted(req.URL), err)
 		}
 		if filterResp != nil {
 			if _, err := io.Copy(io.Discard, req.Body); err != nil {
-				log.Printf("discarding body for %q: %v", redacted.Redacted(req.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
+				log.Printf("discarding body for %q: %v", redacted.Redacted(req.URL), err)
 				break
 			}
 			if err := req.Body.Close(); err != nil {
-				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
+				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err)
 				break
 			}
 			if err := filterResp.Write(tlsConn); err != nil {
-				log.Printf("writing filter response for %q: %v", redacted.Redacted(req.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
+				log.Printf("writing filter response for %q: %v", redacted.Redacted(req.URL), err)
 				break
 			}
 
@@ -295,11 +295,11 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 		resp, err := p.requestTransport.RoundTrip(req)
 		if err != nil {
 			if strings.Contains(err.Error(), "tls: ") {
-				log.Printf("adding %s to ignored hosts", redacted.Redacted(host)) // #nosec G706 -- sanitized by redacted.Redacted
+				log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
 				p.addTransparentHost(host)
 			}
 
-			log.Printf("roundtrip(%s): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+			log.Printf("roundtrip(%s): %v", redacted.Redacted(connReq.Host), err)
 			// TODO: better error presentation
 			response := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\n\r\n%s", err.Error())
 			tlsConn.Write([]byte(response))
@@ -309,9 +309,9 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 		removeHopHeaders(resp.Header)
 
 		if err := p.filter.HandleResponse(req, resp); err != nil {
-			log.Printf("error handling response by filter for %q: %v", redacted.Redacted(req.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
+			log.Printf("error handling response by filter for %q: %v", redacted.Redacted(req.URL), err)
 			if err := resp.Body.Close(); err != nil {
-				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
+				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err)
 			}
 			response := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\n\r\n%s", err.Error())
 			tlsConn.Write([]byte(response))
@@ -319,14 +319,14 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 		}
 
 		if err := resp.Write(tlsConn); err != nil {
-			log.Printf("writing response(%q): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+			log.Printf("writing response(%q): %v", redacted.Redacted(connReq.Host), err)
 			if err := resp.Body.Close(); err != nil {
-				log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+				log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err)
 			}
 			break
 		}
 		if err := resp.Body.Close(); err != nil {
-			log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+			log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err)
 		}
 
 		if req.Close || resp.Close {
@@ -362,14 +362,14 @@ func (p *Proxy) addTransparentHost(host string) {
 func (p *Proxy) tunnel(w net.Conn, r *http.Request) {
 	remoteConn, err := net.Dial("tcp", r.Host) // #nosec G704 -- this is a proxy; forwarding connections is its purpose
 	if err != nil {
-		log.Printf("dialing remote(%s): %v", redacted.Redacted(r.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+		log.Printf("dialing remote(%s): %v", redacted.Redacted(r.Host), err)
 		w.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 		return
 	}
 	defer remoteConn.Close()
 
 	if _, err := w.Write([]byte("HTTP/1.1 200 OK\r\n\r\n")); err != nil {
-		log.Printf("writing 200 OK to client(%s): %v", redacted.Redacted(r.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
+		log.Printf("writing 200 OK to client(%s): %v", redacted.Redacted(r.Host), err)
 		return
 	}
 

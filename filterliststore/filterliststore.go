@@ -104,7 +104,7 @@ func (st *FilterListStore) Get(url string) (io.ReadCloser, error) {
 			case errors.Is(err, errNotExpires):
 				continue
 			case err != nil:
-				log.Printf("failed to parse cache TTL from %q, assuming default: %v", line, err) // #nosec G706 -- %q escapes special characters
+				log.Printf("failed to parse cache TTL from %q, assuming default: %v", line, err)
 				break outer
 			default:
 				break outer

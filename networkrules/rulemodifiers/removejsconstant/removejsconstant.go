@@ -114,7 +114,7 @@ func removeFromInlineHTML(res *http.Response, keys [][]string) error {
 				newScript, err := stripKeys(script, keys)
 
 				if err != nil {
-					log.Printf("error removing JS constant for %q: %v", res.Request.URL, err) // #nosec G706 -- %q escapes special characters
+					log.Printf("error removing JS constant for %q: %v", res.Request.URL, err)
 					modified.Write(script)
 					continue parse
 				}
@@ -131,7 +131,7 @@ func removeFromJS(res *http.Response, keys [][]string) error {
 	return httprewrite.BufferRewrite(res, func(src []byte) []byte {
 		newScript, err := stripKeys(src, keys)
 		if err != nil {
-			log.Printf("error removing JS constant for %q: %v", res.Request.URL, err) // #nosec G706 -- %q escapes special characters
+			log.Printf("error removing JS constant for %q: %v", res.Request.URL, err)
 			return src
 		}
 		return newScript
