@@ -154,5 +154,5 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+	w.Write(body) // #nosec G705 -- body is from internal asset storage, not user input
 }

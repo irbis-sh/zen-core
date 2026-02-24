@@ -52,7 +52,7 @@ func (st *FilterListStore) Get(url string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("create request: %v", err)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(req) // #nosec G704 -- URL is from configured filter lists, not arbitrary user input
 	if err != nil {
 		return nil, fmt.Errorf("do request: %v", err)
 	}
