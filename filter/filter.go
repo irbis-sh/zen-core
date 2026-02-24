@@ -130,20 +130,20 @@ func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error
 	parseURL = func(currentURL string, depth int) {
 		defer wg.Done()
 		if depth > includeMaxDepth {
-			log.Printf("filter: max depth %d exceeded when adding %q", includeMaxDepth, currentURL)
+			log.Printf("filter: max depth %d exceeded when adding %q", includeMaxDepth, currentURL) // #nosec G706 -- %q escapes special characters
 			return
 		}
 
 		base, err := url.Parse(currentURL)
 		if err != nil {
-			log.Printf("filter: error parsing url %q: %v", currentURL, err)
+			log.Printf("filter: error parsing url %q: %v", currentURL, err) // #nosec G706 -- %q escapes special characters
 			return
 		}
 
 		visitedMu.Lock()
 		if _, ok := visited[currentURL]; ok {
 			visitedMu.Unlock()
-			log.Printf("filter: duplicate include %q skipped", currentURL)
+			log.Printf("filter: duplicate include %q skipped", currentURL) // #nosec G706 -- %q escapes special characters
 			return
 		}
 		visited[currentURL] = struct{}{}
@@ -151,7 +151,7 @@ func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error
 
 		contents, err := f.filterListStore.Get(currentURL)
 		if err != nil {
-			log.Printf("failed to get filter list %q from store: %v", currentURL, err)
+			log.Printf("failed to get filter list %q from store: %v", currentURL, err) // #nosec G706 -- %q escapes special characters
 			return
 		}
 		defer contents.Close()
@@ -162,7 +162,7 @@ func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error
 			if after, ok := strings.CutPrefix(line, "!#include"); ok {
 				includeURL, err := resolveInclude(base, after)
 				if err != nil {
-					log.Printf("filter: error resolving include: %v", err)
+					log.Printf("filter: error resolving include: %v", err) // #nosec G706 -- err is from URL parsing, not arbitrary user input
 					continue
 				}
 
@@ -174,7 +174,7 @@ func (f *Filter) AddURL(listURL string, listName string, listTrusted bool) error
 			addRuleLine(line)
 		}
 		if err := scanner.Err(); err != nil {
-			log.Printf("filter: error scanning %q: %v", currentURL, err)
+			log.Printf("filter: error scanning %q: %v", currentURL, err) // #nosec G706 -- %q escapes special characters
 		}
 	}
 
@@ -240,7 +240,7 @@ func (f *Filter) HandleRequest(req *http.Request) (*http.Response, error) {
 		if isUserNavigation(req) {
 			port := f.whitelistSrv.GetPort()
 			if port <= 0 {
-				log.Printf("whitelist server not ready, falling back to simple block response for %q", redacted.Redacted(req.URL))
+				log.Printf("whitelist server not ready, falling back to simple block response for %q", redacted.Redacted(req.URL)) // #nosec G706 -- sanitized by redacted.Redacted
 				return f.networkRules.CreateBlockResponse(req), nil
 			}
 
@@ -282,7 +282,7 @@ func (f *Filter) HandleResponse(req *http.Request, res *http.Response) error {
 	if isDocumentNavigation(req, res) {
 		if err := f.injector.Inject(req, res); err != nil {
 			// This injection error is recoverable, so we log it and continue processing the response.
-			log.Printf("error injecting assets for %q: %v", redacted.Redacted(req.URL), err)
+			log.Printf("error injecting assets for %q: %v", redacted.Redacted(req.URL), err) // #nosec G706 -- sanitized by redacted.Redacted
 		}
 	}
 

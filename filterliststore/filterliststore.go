@@ -52,7 +52,7 @@ func (st *FilterListStore) Get(url string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("create request: %v", err)
 	}
 
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(req) // #nosec G704 -- URL is from configured filter lists, not arbitrary user input
 	if err != nil {
 		return nil, fmt.Errorf("do request: %v", err)
 	}
@@ -104,7 +104,7 @@ func (st *FilterListStore) Get(url string) (io.ReadCloser, error) {
 			case errors.Is(err, errNotExpires):
 				continue
 			case err != nil:
-				log.Printf("failed to parse cache TTL from %q, assuming default: %v", line, err)
+				log.Printf("failed to parse cache TTL from %q, assuming default: %v", line, err) // #nosec G706 -- %q escapes special characters
 				break outer
 			default:
 				break outer

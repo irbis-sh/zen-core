@@ -94,13 +94,13 @@ func (cs *DiskCertStore) installCATrust() error {
 	}
 	defer os.Remove(plistFile.Name())
 
-	cmd = exec.Command("security", "trust-settings-export", "-d", plistFile.Name()) // #nosec G204
+	cmd = exec.Command("security", "trust-settings-export", "-d", plistFile.Name()) // #nosec G204 G702 -- args are not user-controlled
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("trust-settings-export: %w\n%s", err, out)
 	}
 
-	plistData, err := os.ReadFile(plistFile.Name())
+	plistData, err := os.ReadFile(plistFile.Name()) // #nosec G703 -- path is from os.CreateTemp, not user input
 	if err != nil {
 		return fmt.Errorf("read plist file: %w", err)
 	}
@@ -133,11 +133,11 @@ func (cs *DiskCertStore) installCATrust() error {
 	if err != nil {
 		return fmt.Errorf("create plist data: %w", err)
 	}
-	err = os.WriteFile(plistFile.Name(), plistData, 0600)
+	err = os.WriteFile(plistFile.Name(), plistData, 0600) // #nosec G703 -- path is from os.CreateTemp, not user input
 	if err != nil {
 		return fmt.Errorf("write plist file: %w", err)
 	}
-	cmd = exec.Command("security", "trust-settings-import", "-d", plistFile.Name()) // #nosec G204
+	cmd = exec.Command("security", "trust-settings-import", "-d", plistFile.Name()) // #nosec G204 G702 -- args are not user-controlled
 	out, err = cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("trust-settings-import: %w\n%s", err, out)

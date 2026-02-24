@@ -15,7 +15,7 @@ func (p *Proxy) proxyWebsocketTLS(req *http.Request, tlsConfig *tls.Config, clie
 	dialer := &tls.Dialer{NetDialer: p.netDialer, Config: tlsConfig}
 	targetConn, err := dialer.Dial("tcp", req.URL.Host)
 	if err != nil {
-		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err)
+		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
 		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
 		return
 	}
@@ -32,7 +32,7 @@ func (p *Proxy) proxyWebsocket(w http.ResponseWriter, req *http.Request) {
 	targetConn, err := p.netDialer.Dial("tcp", req.URL.Host)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
-		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err)
+		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
 		return
 	}
 	defer targetConn.Close()
@@ -43,7 +43,7 @@ func (p *Proxy) proxyWebsocket(w http.ResponseWriter, req *http.Request) {
 	}
 	clientConn, _, err := hj.Hijack()
 	if err != nil {
-		log.Printf("hijacking websocket client(%s): %v", redacted.Redacted(req.URL.Host), err)
+		log.Printf("hijacking websocket client(%s): %v", redacted.Redacted(req.URL.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
 		return
 	}
 
@@ -58,7 +58,7 @@ func websocketHandshake(req *http.Request, targetConn io.ReadWriter, clientConn 
 	err := req.Write(targetConn)
 	if err != nil {
 		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
-		log.Printf("writing websocket request to backend(%s): %v", redacted.Redacted(req.URL.Host), err)
+		log.Printf("writing websocket request to backend(%s): %v", redacted.Redacted(req.URL.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
 		return err
 	}
 
@@ -67,14 +67,14 @@ func websocketHandshake(req *http.Request, targetConn io.ReadWriter, clientConn 
 	resp, err := http.ReadResponse(targetReader, req)
 	if err != nil {
 		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
-		log.Printf("reading websocket response from backend(%s): %v", redacted.Redacted(req.URL.Host), err)
+		log.Printf("reading websocket response from backend(%s): %v", redacted.Redacted(req.URL.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
 		return err
 	}
 	defer resp.Body.Close()
 
 	err = resp.Write(clientConn)
 	if err != nil {
-		log.Printf("writing websocket response to client(%s): %v", redacted.Redacted(req.URL.Host), err)
+		log.Printf("writing websocket response to client(%s): %v", redacted.Redacted(req.URL.Host), err) // #nosec G706 -- sanitized by redacted.Redacted
 		return err
 	}
 

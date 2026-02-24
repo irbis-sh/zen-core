@@ -107,7 +107,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	refererURL, err := url.Parse(raw)
 	if err != nil {
-		log.Printf("assetserver: invalid referer URL %q: %v", raw, err)
+		log.Printf("assetserver: invalid referer URL %q: %v", raw, err) // #nosec G706 -- %q escapes special characters
 		http.Error(w, "invalid referer", http.StatusBadRequest)
 		return
 	}
@@ -139,7 +139,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	body, err := s.engine.assetBytes(refererURL.Hostname(), kind)
 	if err != nil {
-		log.Printf("assetserver: failed to resolve asset %q: %v", r.URL.Path, err)
+		log.Printf("assetserver: failed to resolve asset %q: %v", r.URL.Path, err) // #nosec G706 -- %q escapes special characters
 		http.Error(w, "asset resolution error", http.StatusInternalServerError)
 		return
 	}
@@ -154,5 +154,5 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
 
 	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+	w.Write(body) // #nosec G705 -- body is from internal asset storage, not user input
 }
