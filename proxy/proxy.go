@@ -254,6 +254,7 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 				ln.Close()
 			}
 		},
+		ReadHeaderTimeout: 20 * time.Second,
 	}
 
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
