@@ -5,15 +5,36 @@ import (
 	"crypto/tls"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"strings"
 
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
-func (p *Proxy) proxyWebsocketTLS(req *http.Request, tlsConfig *tls.Config, clientConn *tls.Conn) {
-	dialer := &tls.Dialer{NetDialer: p.netDialer, Config: tlsConfig}
-	targetConn, err := dialer.Dial("tcp", req.URL.Host)
+func (p *Proxy) proxyWebsocketTLS(w http.ResponseWriter, req *http.Request) {
+	dialer := &tls.Dialer{NetDialer: p.netDialer, Config: &tls.Config{MinVersion: tls.VersionTLS12}}
+	hijackAndTunnelWebsocket(w, req, dialer.Dial)
+}
+
+func (p *Proxy) proxyWebsocket(w http.ResponseWriter, req *http.Request) {
+	hijackAndTunnelWebsocket(w, req, p.netDialer.Dial)
+}
+
+func hijackAndTunnelWebsocket(w http.ResponseWriter, req *http.Request, dial func(network, addr string) (net.Conn, error)) {
+	hj, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "websocket hijack not supported", http.StatusInternalServerError)
+		return
+	}
+	clientConn, _, err := hj.Hijack()
+	if err != nil {
+		log.Printf("hijacking websocket(%s): %v", redacted.Redacted(req.URL.Host), err)
+		return
+	}
+	defer clientConn.Close()
+
+	targetConn, err := dial("tcp", req.URL.Host)
 	if err != nil {
 		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err)
 		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
@@ -24,33 +45,6 @@ func (p *Proxy) proxyWebsocketTLS(req *http.Request, tlsConfig *tls.Config, clie
 	if err := websocketHandshake(req, targetConn, clientConn); err != nil {
 		return
 	}
-
-	linkBidirectionalTunnel(targetConn, clientConn)
-}
-
-func (p *Proxy) proxyWebsocket(w http.ResponseWriter, req *http.Request) {
-	targetConn, err := p.netDialer.Dial("tcp", req.URL.Host)
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err)
-		return
-	}
-	defer targetConn.Close()
-
-	hj, ok := w.(http.Hijacker)
-	if !ok {
-		panic("http server does not support hijacking")
-	}
-	clientConn, _, err := hj.Hijack()
-	if err != nil {
-		log.Printf("hijacking websocket client(%s): %v", redacted.Redacted(req.URL.Host), err)
-		return
-	}
-
-	if err := websocketHandshake(req, targetConn, clientConn); err != nil {
-		return
-	}
-
 	linkBidirectionalTunnel(targetConn, clientConn)
 }
 

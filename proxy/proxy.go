@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -61,8 +60,9 @@ func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, err
 		KeepAlive: 30 * time.Second,
 	}
 	p.requestTransport = &http.Transport{
-		Dial:                p.netDialer.Dial,
-		TLSHandshakeTimeout: 20 * time.Second,
+		Dial:              p.netDialer.Dial,
+		ForceAttemptHTTP2: true,
+		MaxIdleConns:      100,
 	}
 	p.requestClient = &http.Client{
 		Timeout:   60 * time.Second,
@@ -224,72 +224,73 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{*tlsCert},
+		NextProtos:   []string{"h2", "http/1.1"},
 		MinVersion:   tls.VersionTLS12,
 	}
 
 	tlsConn := tls.Server(clientConn, tlsConfig)
 	defer tlsConn.Close()
-	connReader := bufio.NewReader(tlsConn)
 
-	// Read requests in a loop to allow for HTTP connection reuse.
-	// https://en.wikipedia.org/wiki/HTTP_persistent_connection
-	for {
-		req, err := http.ReadRequest(connReader)
-		if err != nil {
-			if err != io.EOF {
+	// Perform the TLS handshake manually so we can capture TLS errors
+	// and add the host to transparentHosts before entering the server loop.
+	if err := tlsConn.HandshakeContext(context.Background()); err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "tls: ") {
+			log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
+			p.addTransparentHost(host)
+		}
+		log.Printf("TLS handshake(%s): %v", redacted.Redacted(connReq.Host), err)
+		return
+	}
 
-				msg := err.Error()
-				if strings.Contains(msg, "tls: ") {
-					log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
-					p.addTransparentHost(host)
-				}
+	ln := newSingleConnListener(tlsConn)
 
-				// The following errors occur when the underlying clientConn is closed.
-				// This usually happens during normal request/response flow when the client
-				// decides it no longer needs the connection to the host.
-				// To avoid excessive noise in the logs, we suppress these messages.
-				if !strings.HasSuffix(msg, "connection reset by peer") && !strings.HasSuffix(msg, "An existing connection was forcibly closed by the remote host.") {
-					log.Printf("reading request(%s): %v", redacted.Redacted(connReq.Host), err)
-				}
+	srv := &http.Server{
+		Handler:   p.connectHandler(connReq, host, ln),
+		TLSConfig: tlsConfig,
+		ConnState: func(_ net.Conn, state http.ConnState) {
+			if state == http.StateClosed {
+				ln.Close()
 			}
-			break
-		}
+		},
+	}
+
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+		log.Printf("serving connection(%s): %v", redacted.Redacted(connReq.Host), err)
+	}
+}
+
+// connectHandler returns an http.Handler that processes requests on a CONNECT-tunnelled TLS connection.
+func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleConnListener) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req.URL.Host = connReq.Host
+		req.URL.Scheme = "https"
 
-		if isWS(req) {
-			// Establish transparent flow, no hop-by-hop header removal required.
-			p.proxyWebsocketTLS(req, tlsConfig, tlsConn)
-			break
+		// WebSocket upgrade is only done over HTTP/1.1.
+		if isWS(req) && req.ProtoMajor == 1 {
+			p.proxyWebsocketTLS(w, req)
+			ln.Close()
+			return
 		}
 
-		// A standard CONNECT proxy establishes a TCP connection to the requested destination and relays the stream between the client and server.
-		// Here, we are MITM-ing the traffic and handling the request-response flow ourselves.
-		// Since the client and server do not share a direct TCP connection in this setup, we must strip hop-by-hop headers.
 		removeHopHeaders(req.Header)
-		req.URL.Scheme = "https"
 
 		filterResp, err := p.filter.HandleRequest(req)
 		if err != nil {
 			log.Printf("handling request for %q: %v", redacted.Redacted(req.URL), err)
 		}
 		if filterResp != nil {
-			if _, err := io.Copy(io.Discard, req.Body); err != nil {
-				log.Printf("discarding body for %q: %v", redacted.Redacted(req.URL), err)
-				break
+			writeResp(w, filterResp)
+			if filterResp.Body != nil {
+				filterResp.Body.Close()
 			}
-			if err := req.Body.Close(); err != nil {
-				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err)
-				break
-			}
-			if err := filterResp.Write(tlsConn); err != nil {
-				log.Printf("writing filter response for %q: %v", redacted.Redacted(req.URL), err)
-				break
-			}
+			return
+		}
 
-			if req.Close {
-				break
-			}
-			continue
+		// Go's HTTP server always sets a non-nil value for req.Body.
+		// RoundTrip interprets a non-nil Body as chunked, which causes strict servers to reject the request.
+		if req.ContentLength == 0 {
+			req.Body = nil
 		}
 
 		resp, err := p.requestTransport.RoundTrip(req)
@@ -298,41 +299,22 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 				log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
 				p.addTransparentHost(host)
 			}
-
 			log.Printf("roundtrip(%s): %v", redacted.Redacted(connReq.Host), err)
-			// TODO: better error presentation
-			response := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\n\r\n%s", err.Error())
-			tlsConn.Write([]byte(response))
-			break
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
 		}
+		defer resp.Body.Close()
 
 		removeHopHeaders(resp.Header)
 
 		if err := p.filter.HandleResponse(req, resp); err != nil {
 			log.Printf("error handling response by filter for %q: %v", redacted.Redacted(req.URL), err)
-			if err := resp.Body.Close(); err != nil {
-				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err)
-			}
-			response := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\n\r\n%s", err.Error())
-			tlsConn.Write([]byte(response))
-			break
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
 		}
 
-		if err := resp.Write(tlsConn); err != nil {
-			log.Printf("writing response(%q): %v", redacted.Redacted(connReq.Host), err)
-			if err := resp.Body.Close(); err != nil {
-				log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err)
-			}
-			break
-		}
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err)
-		}
-
-		if req.Close || resp.Close {
-			break
-		}
-	}
+		writeResp(w, resp)
+	})
 }
 
 // shouldMITM returns true if the host should be MITM'd.
@@ -374,6 +356,20 @@ func (p *Proxy) tunnel(w net.Conn, r *http.Request) {
 	}
 
 	linkBidirectionalTunnel(w, remoteConn)
+}
+
+// writeResp writes the response (status code, headers, and body) to the ResponseWriter.
+// It is the caller's responsibility to close the response body after calling the function.
+func writeResp(w http.ResponseWriter, resp *http.Response) {
+	for h, v := range resp.Header {
+		for _, vv := range v {
+			w.Header().Add(h, vv)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	if resp.Body != nil {
+		io.Copy(w, resp.Body)
+	}
 }
 
 func linkBidirectionalTunnel(src, dst io.ReadWriter) {
