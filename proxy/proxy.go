@@ -60,9 +60,10 @@ func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, err
 		KeepAlive: 30 * time.Second,
 	}
 	p.requestTransport = &http.Transport{
-		Dial:              p.netDialer.Dial,
-		ForceAttemptHTTP2: true,
-		MaxIdleConns:      100,
+		DialContext:         p.netDialer.DialContext,
+		ForceAttemptHTTP2:   true,
+		TLSHandshakeTimeout: 20 * time.Second,
+		MaxIdleConns:        100,
 	}
 	p.requestClient = &http.Client{
 		Timeout:   60 * time.Second,
