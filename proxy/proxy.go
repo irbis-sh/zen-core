@@ -158,7 +158,7 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request) {
 
 	removeHopHeaders(r.Header)
 
-	resp, err := p.requestClient.Do(r)
+	resp, err := p.requestClient.Do(r) // #nosec G704 -- this is a proxy; forwarding requests is its purpose
 	if err != nil {
 		log.Printf("error making request: %v", redacted.Redacted(err)) // The error might contain information about the hostname we are connecting to.
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -343,7 +343,7 @@ func (p *Proxy) addTransparentHost(host string) {
 // tunnel tunnels the connection between the client and the remote server
 // without inspecting the traffic.
 func (p *Proxy) tunnel(w net.Conn, r *http.Request) {
-	remoteConn, err := net.Dial("tcp", r.Host)
+	remoteConn, err := net.Dial("tcp", r.Host) // #nosec G704 -- this is a proxy; forwarding connections is its purpose
 	if err != nil {
 		log.Printf("dialing remote(%s): %v", redacted.Redacted(r.Host), err)
 		w.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))

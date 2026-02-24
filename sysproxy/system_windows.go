@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	wininet                       = windows.NewLazySystemDLL("wininet.dll")
-	internetSetOption             = wininet.NewProc("InternetSetOptionW")
-	internetOptionSettingsChanged = 39
-	internetOptionRefresh         = 37
+	wininet                               = windows.NewLazySystemDLL("wininet.dll")
+	internetSetOption                     = wininet.NewProc("InternetSetOptionW")
+	internetOptionSettingsChanged uintptr = 39
+	internetOptionRefresh         uintptr = 37
 
 	//go:embed exclusions/windows.txt
 	platformSpecificExcludedHosts []byte
@@ -56,8 +56,8 @@ func unsetSystemProxy() error {
 	return nil
 }
 
-func callInternetSetOption(dwOption int) {
-	ret, _, err := internetSetOption.Call(0, uintptr(dwOption), 0, 0)
+func callInternetSetOption(dwOption uintptr) {
+	ret, _, err := internetSetOption.Call(0, dwOption, 0, 0)
 	if ret == 0 {
 		log.Printf("failed to call InternetSetOption with option %d: %v", dwOption, err)
 	}
