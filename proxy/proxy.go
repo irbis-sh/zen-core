@@ -64,6 +64,7 @@ func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, err
 		ForceAttemptHTTP2:   true,
 		TLSHandshakeTimeout: 20 * time.Second,
 		MaxIdleConns:        100,
+		IdleConnTimeout:     90 * time.Second,
 	}
 	p.requestClient = &http.Client{
 		Timeout:   60 * time.Second,
