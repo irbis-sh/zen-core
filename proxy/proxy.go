@@ -268,6 +268,7 @@ func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleCon
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req.URL.Host = connReq.Host
 		req.URL.Scheme = "https"
+		req.RequestURI = ""
 
 		// WebSocket upgrade is only done over HTTP/1.1.
 		if isWS(req) && req.ProtoMajor == 1 {
