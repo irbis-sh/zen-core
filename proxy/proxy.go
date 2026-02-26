@@ -373,6 +373,11 @@ func writeResp(w http.ResponseWriter, resp *http.Response) {
 	if resp.Body != nil {
 		io.Copy(w, resp.Body)
 	}
+	for h, v := range resp.Trailer {
+		for _, vv := range v {
+			w.Header().Add(http.TrailerPrefix+h, vv)
+		}
+	}
 }
 
 func linkBidirectionalTunnel(src, dst io.ReadWriter) {
