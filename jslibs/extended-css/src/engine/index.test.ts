@@ -1,8 +1,25 @@
-import { describe, test, beforeEach, afterEach, expect } from '@jest/globals';
+import { describe, test, beforeAll, beforeEach, afterAll, afterEach, expect } from '@jest/globals';
 
 import { Engine } from '.';
 
-describe('Engine', () => {
+describe.each([
+  ['native :has/:is/:not support ON', true],
+  ['native :has/:is/:not support OFF', false],
+])('Engine (%s)', (_, nativeOn) => {
+  let origCSS: typeof window.CSS;
+
+  beforeAll(() => {
+    origCSS = window.CSS;
+    window.CSS = {
+      supports: () => nativeOn,
+      escape: (s: string) => s,
+    } as unknown as typeof CSS;
+  });
+
+  afterAll(() => {
+    window.CSS = origCSS;
+  });
+
   let originalBody: string;
   let startedEngines: Engine[] = [];
 

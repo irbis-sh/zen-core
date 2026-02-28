@@ -6,8 +6,8 @@ tasks:
     dir: jslibs/extended-css
     cmds:
       - npm run build
-      - cp dist/bundle.js ../../extendedcss
-      - du -sh ../../extendedcss/bundle.js
+      - cp dist/bundle.js ../../internal/asset/extendedcss
+      - du -sh ../../internal/asset/extendedcss/bundle.js
 
   lint:
     desc: Lints the code.
