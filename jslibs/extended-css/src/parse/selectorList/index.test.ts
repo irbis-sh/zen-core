@@ -75,20 +75,23 @@ describe('parseSelectorList', () => {
     });
 
     test.each<[string, string]>([
-      // :not with standard-only args → single RawQuery
+      // :not with standard-only args -> single RawQuery
       ['div:not(.ad)', 'RawQuery(div:not(.ad))'],
 
-      // :has with standard-only args → merged into raw
+      // :has with standard-only args -> merged into raw
       [
         'div:contains(ad) span:has(.banner), > .x + p, code',
         'RawQuery(div) :Contains(ad) RawQuery(span:has(.banner)), ChildComb RawMatches(.x) NextSiblComb RawMatches(p), RawQuery(code)',
       ],
 
-      // :is with standard-only args → stays in raw run
+      // :is with standard-only args -> stays in raw run
       [
         ':min-text-length(2) + div > div:is(.class) + span',
         'RawQuery(*) :MinTextLength(2) NextSiblComb RawMatches(div) RawQuery(:scope>div:is(.class)+span)',
       ],
+
+      // :has with non-standard arg -> extended
+      [':has(:min-text-length(42))', 'RawQuery(*) :Has(...)'],
     ])('parse %j', (input, expected) => {
       expect(plan(input)).toEqual(expected);
     });
@@ -110,16 +113,16 @@ describe('parseSelectorList', () => {
     });
 
     test.each<[string, string]>([
-      // :not with standard-only args → extended path
+      // :not with standard-only args -> extended path
       ['div:not(.ad)', 'RawQuery(div) :Not(...)'],
 
-      // :has with standard-only args → extended path
+      // :has with standard-only args -> extended path
       [
         'div:contains(ad) span:has(.banner), > .x + p, code',
         'RawQuery(div) :Contains(ad) RawQuery(span) :Has(...), ChildComb RawMatches(.x) NextSiblComb RawMatches(p), RawQuery(code)',
       ],
 
-      // :is with standard-only args → extended path
+      // :is with standard-only args -> extended path
       [
         ':min-text-length(2) + div > div:is(.class) + span',
         'RawQuery(*) :MinTextLength(2) NextSiblComb RawMatches(div) RawQuery(:scope>div) :Is(...) NextSiblComb RawMatches(span)',

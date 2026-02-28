@@ -62,13 +62,17 @@ describe('tokenize', () => {
     });
 
     test.each<[string, string]>([
-      // :not/:has/:is with standard-only args → merged into raw
+      // :not/:has/:is with standard-only args -> merged into raw
       ['div:not(.ad)', 'RawTok(div:not(.ad))'],
       ['div :not(.ad)', 'RawTok(div) CombTok( ) RawTok(:not(.ad))'],
       ['div:has(span, strong)', 'RawTok(div:has(span, strong))'],
+      ['div:is(.ad, .promo)', 'RawTok(div:is(.ad, .promo))'],
 
-      // Nested optimizable: both :not and :has have standard-only args → all native
+      // Nested optimizable: both :not and :has have standard-only args -> all native
       ['div:not(:has(.ad))', 'RawTok(div:not(:has(.ad)))'],
+
+      // Nested non-optimizable: :not contains :has-text
+      [':not(:has-text(test))', 'ExtTok(:not(:has-text(test)))'],
     ])('tokenize selector %j', (input, expected) => {
       expect(tok(input)).toEqual(expected);
     });
@@ -90,10 +94,11 @@ describe('tokenize', () => {
     });
 
     test.each<[string, string]>([
-      // :not/:has/:is with standard-only args → stays extended (no native support)
+      // :not/:has/:is with standard-only args -> stays extended (no native support)
       ['div:not(.ad)', 'RawTok(div) ExtTok(:not(.ad))'],
       ['div :not(.ad)', 'RawTok(div) CombTok( ) ExtTok(:not(.ad))'],
       ['div:has(span, strong)', 'RawTok(div) ExtTok(:has(span, strong))'],
+      ['div:is(.ad, .promo)', 'RawTok(div) ExtTok(:is(.ad, .promo))'],
 
       // Nested: falls back to extended
       ['div:not(:has(.ad))', 'RawTok(div) ExtTok(:not(:has(.ad)))'],
