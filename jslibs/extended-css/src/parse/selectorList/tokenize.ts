@@ -63,6 +63,13 @@ function parseTokens(ast: CSSTree.CssNode, selector: string): IRToken[] {
       case 'PseudoClassSelector': {
         const name = node.name.toLowerCase();
         if (name in extPseudoClasses) {
+          // Optimization: if :has/:is/:not contains only standard CSS args,
+          // treat the whole thing as raw CSS for native evaluation.
+          if (getNativeSupport(name) && hasOnlyStandardArgs(node)) {
+            cssBuf += getNodeLit(node);
+            return CSSTree.walk.skip;
+          }
+
           flushRaw();
 
           const arg = node.children?.first;
@@ -87,6 +94,50 @@ function parseTokens(ast: CSSTree.CssNode, selector: string): IRToken[] {
   flushRaw();
 
   return out;
+}
+
+/**
+ * Feature-detection for pseudo-classes that can be evaluated natively
+ * when their arguments contain only standard CSS.
+ */
+function getNativeSupport(pseudoSelector: string): boolean {
+  switch (pseudoSelector) {
+    case 'has':
+      return typeof CSS !== 'undefined' && !!CSS.supports?.('selector(:has(*))');
+    case 'is':
+      return typeof CSS !== 'undefined' && !!CSS.supports?.('selector(:is(*))');
+    case 'not':
+      return typeof CSS !== 'undefined' && !!CSS.supports?.('selector(:not(*))');
+    default:
+      return false;
+  }
+}
+
+/**
+ * Checks whether a pseudo-class node's argument subtree contains only
+ * standard CSS (no extended pseudo-classes that require JS evaluation).
+ */
+function hasOnlyStandardArgs(node: CSSTree.PseudoClassSelector): boolean {
+  let result = true;
+  CSSTree.walk(node, {
+    visit: 'PseudoClassSelector',
+    enter(child) {
+      if (child === node) return;
+      const name = child.name.toLowerCase();
+      if (name in extPseudoClasses) {
+        if (getNativeSupport(name)) {
+          if (!hasOnlyStandardArgs(child)) {
+            result = false;
+            return this.break;
+          }
+        } else {
+          result = false;
+          return this.break;
+        }
+      }
+    },
+  });
+  return result;
 }
 
 /**
