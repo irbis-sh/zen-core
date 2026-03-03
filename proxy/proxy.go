@@ -1,15 +1,17 @@
 package proxy
 
 import (
-	"bufio"
 	"context"
 	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"mime"
 	"net"
 	"net/http"
+	"net/http/httptrace"
+	"net/textproto"
 	"strings"
 	"sync"
 	"time"
@@ -61,8 +63,11 @@ func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, err
 		KeepAlive: 30 * time.Second,
 	}
 	p.requestTransport = &http.Transport{
-		Dial:                p.netDialer.Dial,
+		DialContext:         p.netDialer.DialContext,
+		ForceAttemptHTTP2:   true,
 		TLSHandshakeTimeout: 20 * time.Second,
+		MaxIdleConns:        100,
+		IdleConnTimeout:     90 * time.Second,
 	}
 	p.requestClient = &http.Client{
 		Timeout:   60 * time.Second,
@@ -148,16 +153,56 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isWS(r) {
-		// should we remove hop-by-hop headers here?
 		p.proxyWebsocket(w, r)
 		return
 	}
 
 	r.RequestURI = ""
+	r.Close = false
+
+	// Check before removeHopHeaders strips Te.
+	teTrailers := headerContains(r.Header, "Te", "trailers")
 
 	removeHopHeaders(r.Header)
 
+	if teTrailers {
+		r.Header.Set("Te", "trailers")
+	}
+
+	if _, ok := r.Header["User-Agent"]; !ok {
+		// If the outbound request doesn't have a User-Agent header set,
+		// don't send the default Go HTTP client User-Agent.
+		r.Header.Set("User-Agent", "")
+	}
+
+	var (
+		roundTripMutex sync.Mutex
+		roundTripDone  bool
+	)
+	trace := &httptrace.ClientTrace{
+		Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+			roundTripMutex.Lock()
+			defer roundTripMutex.Unlock()
+			if roundTripDone {
+				return nil
+			}
+			h := w.Header()
+			for k, vv := range header {
+				for _, v := range vv {
+					h.Add(k, v)
+				}
+			}
+			w.WriteHeader(code)
+			clear(h)
+			return nil
+		},
+	}
+	r = r.WithContext(httptrace.WithClientTrace(r.Context(), trace))
+
 	resp, err := p.requestClient.Do(r) // #nosec G704 -- this is a proxy; forwarding requests is its purpose
+	roundTripMutex.Lock()
+	roundTripDone = true
+	roundTripMutex.Unlock()
 	if err != nil {
 		log.Printf("error making request: %v", redacted.Redacted(err)) // The error might contain information about the hostname we are connecting to.
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -173,14 +218,7 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for k, vv := range resp.Header {
-		for _, v := range vv {
-			w.Header().Add(k, v)
-		}
-	}
-
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	writeResp(w, resp)
 }
 
 // proxyConnect proxies the initial CONNECT and subsequent data between the
@@ -224,115 +262,141 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{*tlsCert},
+		NextProtos:   []string{"h2", "http/1.1"},
 		MinVersion:   tls.VersionTLS12,
 	}
 
 	tlsConn := tls.Server(clientConn, tlsConfig)
 	defer tlsConn.Close()
-	connReader := bufio.NewReader(tlsConn)
 
-	// Read requests in a loop to allow for HTTP connection reuse.
-	// https://en.wikipedia.org/wiki/HTTP_persistent_connection
-	for {
-		req, err := http.ReadRequest(connReader)
-		if err != nil {
-			if err != io.EOF {
+	// Perform the TLS handshake manually so we can capture TLS errors
+	// and add the host to transparentHosts before entering the server loop.
+	if err := tlsConn.HandshakeContext(context.Background()); err != nil {
+		msg := err.Error()
+		if strings.Contains(msg, "tls: ") {
+			log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
+			p.addTransparentHost(host)
+		}
+		log.Printf("TLS handshake(%s): %v", redacted.Redacted(connReq.Host), err)
+		return
+	}
 
-				msg := err.Error()
-				if strings.Contains(msg, "tls: ") {
-					log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
-					p.addTransparentHost(host)
-				}
+	ln := newSingleConnListener(tlsConn)
 
-				// The following errors occur when the underlying clientConn is closed.
-				// This usually happens during normal request/response flow when the client
-				// decides it no longer needs the connection to the host.
-				// To avoid excessive noise in the logs, we suppress these messages.
-				if !strings.HasSuffix(msg, "connection reset by peer") && !strings.HasSuffix(msg, "An existing connection was forcibly closed by the remote host.") {
-					log.Printf("reading request(%s): %v", redacted.Redacted(connReq.Host), err)
-				}
+	srv := &http.Server{
+		Handler:   p.connectHandler(connReq, host, ln),
+		TLSConfig: tlsConfig,
+		ConnState: func(_ net.Conn, state http.ConnState) {
+			if state == http.StateClosed {
+				ln.Close()
 			}
-			break
-		}
+		},
+		ReadHeaderTimeout: 20 * time.Second,
+	}
+
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+		log.Printf("serving connection(%s): %v", redacted.Redacted(connReq.Host), err)
+	}
+}
+
+// connectHandler returns an http.Handler that processes requests on a CONNECT-tunnelled TLS connection.
+func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleConnListener) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req.URL.Host = connReq.Host
+		req.URL.Scheme = "https"
+		req.RequestURI = ""
+		req.Close = false
 
-		if isWS(req) {
-			// Establish transparent flow, no hop-by-hop header removal required.
-			p.proxyWebsocketTLS(req, tlsConfig, tlsConn)
-			break
+		// WebSocket upgrade is only done over HTTP/1.1.
+		if isWS(req) && req.ProtoMajor == 1 {
+			p.proxyWebsocketTLS(w, req)
+			ln.Close()
+			return
 		}
 
-		// A standard CONNECT proxy establishes a TCP connection to the requested destination and relays the stream between the client and server.
-		// Here, we are MITM-ing the traffic and handling the request-response flow ourselves.
-		// Since the client and server do not share a direct TCP connection in this setup, we must strip hop-by-hop headers.
+		// Check before removeHopHeaders strips Te.
+		teTrailers := headerContains(req.Header, "Te", "trailers")
+
 		removeHopHeaders(req.Header)
-		req.URL.Scheme = "https"
+
+		if teTrailers {
+			req.Header.Set("Te", "trailers")
+		}
+
+		if _, ok := req.Header["User-Agent"]; !ok {
+			// If the outbound request doesn't have a User-Agent header set,
+			// don't send the default Go HTTP client User-Agent.
+			req.Header.Set("User-Agent", "")
+		}
 
 		filterResp, err := p.filter.HandleRequest(req)
 		if err != nil {
 			log.Printf("handling request for %q: %v", redacted.Redacted(req.URL), err)
 		}
 		if filterResp != nil {
-			if _, err := io.Copy(io.Discard, req.Body); err != nil {
-				log.Printf("discarding body for %q: %v", redacted.Redacted(req.URL), err)
-				break
+			writeResp(w, filterResp)
+			if filterResp.Body != nil {
+				filterResp.Body.Close()
 			}
-			if err := req.Body.Close(); err != nil {
-				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err)
-				break
-			}
-			if err := filterResp.Write(tlsConn); err != nil {
-				log.Printf("writing filter response for %q: %v", redacted.Redacted(req.URL), err)
-				break
-			}
-
-			if req.Close {
-				break
-			}
-			continue
+			return
 		}
 
+		// Go's HTTP server always sets a non-nil value for req.Body.
+		// RoundTrip interprets a non-nil Body as chunked, which causes strict servers to reject the request.
+		if req.ContentLength == 0 {
+			req.Body = nil
+		}
+
+		var (
+			roundTripMutex sync.Mutex
+			roundTripDone  bool
+		)
+		trace := &httptrace.ClientTrace{
+			Got1xxResponse: func(code int, header textproto.MIMEHeader) error {
+				roundTripMutex.Lock()
+				defer roundTripMutex.Unlock()
+				if roundTripDone {
+					return nil
+				}
+				h := w.Header()
+				for k, vv := range header {
+					for _, v := range vv {
+						h.Add(k, v)
+					}
+				}
+				w.WriteHeader(code)
+				// Clear headers, which is not done automatically by ResponseWriter.WriteHeader() for 1xx responses.
+				clear(h)
+				return nil
+			},
+		}
+		req = req.WithContext(httptrace.WithClientTrace(req.Context(), trace))
+
 		resp, err := p.requestTransport.RoundTrip(req)
+		roundTripMutex.Lock()
+		roundTripDone = true
+		roundTripMutex.Unlock()
 		if err != nil {
 			if strings.Contains(err.Error(), "tls: ") {
 				log.Printf("adding %s to ignored hosts", redacted.Redacted(host))
 				p.addTransparentHost(host)
 			}
-
 			log.Printf("roundtrip(%s): %v", redacted.Redacted(connReq.Host), err)
-			// TODO: better error presentation
-			response := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\n\r\n%s", err.Error())
-			tlsConn.Write([]byte(response))
-			break
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
 		}
+		defer resp.Body.Close()
 
 		removeHopHeaders(resp.Header)
 
 		if err := p.filter.HandleResponse(req, resp); err != nil {
 			log.Printf("error handling response by filter for %q: %v", redacted.Redacted(req.URL), err)
-			if err := resp.Body.Close(); err != nil {
-				log.Printf("closing body for %q: %v", redacted.Redacted(req.URL), err)
-			}
-			response := fmt.Sprintf("HTTP/1.1 502 Bad Gateway\r\n\r\n%s", err.Error())
-			tlsConn.Write([]byte(response))
-			break
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
 		}
 
-		if err := resp.Write(tlsConn); err != nil {
-			log.Printf("writing response(%q): %v", redacted.Redacted(connReq.Host), err)
-			if err := resp.Body.Close(); err != nil {
-				log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err)
-			}
-			break
-		}
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("closing body(%q): %v", redacted.Redacted(connReq.Host), err)
-		}
-
-		if req.Close || resp.Close {
-			break
-		}
-	}
+		writeResp(w, resp)
+	})
 }
 
 // shouldMITM returns true if the host should be MITM'd.
@@ -376,6 +440,67 @@ func (p *Proxy) tunnel(w net.Conn, r *http.Request) {
 	linkBidirectionalTunnel(w, remoteConn)
 }
 
+// writeResp writes the response (status code, headers, and body) to the ResponseWriter.
+//
+// writeResp closes resp.Body to populate trailers for HTTP/1.1 chunked responses.
+// The caller's deferred Body.Close is still safe (double close is benign for HTTP response bodies).
+func writeResp(w http.ResponseWriter, resp *http.Response) {
+	// Announce trailers before writing the status line so net/http can
+	// emit a proper Trailer header in the chunked response.
+	announcedTrailers := len(resp.Trailer)
+	if announcedTrailers > 0 {
+		trailerKeys := make([]string, 0, len(resp.Trailer))
+		for k := range resp.Trailer {
+			trailerKeys = append(trailerKeys, k)
+		}
+		w.Header().Add("Trailer", strings.Join(trailerKeys, ", "))
+	}
+
+	for h, v := range resp.Header {
+		for _, vv := range v {
+			w.Header().Add(h, vv)
+		}
+	}
+
+	w.WriteHeader(resp.StatusCode)
+
+	if resp.Body != nil {
+		var dst io.Writer = w
+		if isStreamingResponse(resp) {
+			rc := http.NewResponseController(w)
+			dst = &flushWriter{w: w, flush: rc.Flush}
+		}
+		_, err := io.Copy(dst, resp.Body)
+		// Close the body before reading trailers;
+		// resp.Trailer is only populated after the body is fully consumed and closed.
+		resp.Body.Close()
+		if err != nil {
+			panic(http.ErrAbortHandler)
+		}
+	}
+
+	if len(resp.Trailer) > 0 {
+		// Force chunking if we saw a response trailer.
+		// This prevents net/http from calculating the length for short
+		// bodies and adding a Content-Length.
+		http.NewResponseController(w).Flush()
+	}
+
+	if len(resp.Trailer) == announcedTrailers {
+		for h, v := range resp.Trailer {
+			for _, vv := range v {
+				w.Header().Add(h, vv)
+			}
+		}
+		return
+	}
+	for h, v := range resp.Trailer {
+		for _, vv := range v {
+			w.Header().Add(http.TrailerPrefix+h, vv)
+		}
+	}
+}
+
 func linkBidirectionalTunnel(src, dst io.ReadWriter) {
 	doneC := make(chan struct{}, 2)
 	go tunnelConn(src, dst, doneC)
@@ -390,6 +515,19 @@ func tunnelConn(dst io.Writer, src io.Reader, done chan<- struct{}) {
 		log.Printf("copying: %v", err)
 	}
 	done <- struct{}{}
+}
+
+// headerContains returns true if the named header contains the given value
+// as a comma-separated token (case-insensitive).
+func headerContains(h http.Header, name, value string) bool {
+	for _, v := range h[name] {
+		for _, s := range strings.Split(v, ",") {
+			if strings.EqualFold(strings.TrimSpace(s), value) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // isCloseable returns true if the error is one that indicates the connection
@@ -407,9 +545,35 @@ func isCloseable(err error) (ok bool) {
 	}
 }
 
+// isStreamingResponse reports whether the response should be flushed
+// to the client immediately (e.g. Server-Sent Events, chunked streams).
+func isStreamingResponse(resp *http.Response) bool {
+	if ct, _, _ := mime.ParseMediaType(resp.Header.Get("Content-Type")); ct == "text/event-stream" {
+		return true
+	}
+	return resp.ContentLength == -1
+}
+
+// flushWriter wraps an io.Writer and calls flush after every Write
+// to ensure streaming data reaches the client without buffering delay.
+type flushWriter struct {
+	w     io.Writer
+	flush func() error
+}
+
+func (f *flushWriter) Write(p []byte) (int, error) {
+	n, err := f.w.Write(p)
+	if n > 0 {
+		f.flush()
+	}
+	return n, err
+}
+
 // Hop-by-hop headers. These are removed when sent to the backend.
-// http://www.w3.org/Protocols/rfc2616/rfc2616-sec13.html
-// Note: this may be out of date, see RFC 7230 Section 6.1.
+// As of RFC 7230, hop-by-hop headers are required to appear in the
+// Connection header field. These are the headers defined by the
+// obsoleted RFC 2616 (section 13.5.1) and are used for backward
+// compatibility.
 var hopHeaders = []string{
 	"Connection",
 	"Proxy-Connection",
@@ -423,6 +587,17 @@ var hopHeaders = []string{
 }
 
 func removeHopHeaders(header http.Header) {
+	// RFC 7230, section 6.1: Remove headers listed in the "Connection" header.
+	for _, f := range header["Connection"] {
+		for _, sf := range strings.Split(f, ",") {
+			if sf = strings.TrimSpace(sf); sf != "" {
+				header.Del(sf)
+			}
+		}
+	}
+	// RFC 2616, section 13.5.1: Remove a set of known hop-by-hop headers.
+	// This behavior is superseded by the RFC 7230 Connection header, but
+	// preserve it for backwards compatibility.
 	for _, h := range hopHeaders {
 		header.Del(h)
 	}
