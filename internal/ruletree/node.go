@@ -47,7 +47,7 @@ func (n *node[T]) addEdge(label token, e *node[T]) {
 		n.anchor = e
 		return
 	default:
-		bLabel := byte(label)
+		bLabel := byte(label) // #nosec G115 -- label is guaranteed to be <=255 past this point
 		idx := sort.Search(len(n.edges), func(i int) bool {
 			return n.edges[i].label >= bLabel
 		})
@@ -72,7 +72,7 @@ func (n *node[T]) updateEdge(label token, node *node[T]) {
 		n.anchor = node
 		return
 	default:
-		bLabel := byte(label)
+		bLabel := byte(label) // #nosec G115 -- label is guaranteed to be <=255 past this point
 		idx := sort.Search(len(n.edges), func(i int) bool {
 			return n.edges[i].label >= bLabel
 		})
@@ -93,7 +93,7 @@ func (n *node[T]) getEdge(label token) *node[T] {
 	case tokenAnchor:
 		return n.anchor
 	default:
-		bLabel := byte(label)
+		bLabel := byte(label) // #nosec G115 -- label is guaranteed to be <=255 past this point
 		idx := sort.Search(len(n.edges), func(i int) bool {
 			return n.edges[i].label >= bLabel
 		})
