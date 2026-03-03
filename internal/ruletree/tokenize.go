@@ -19,7 +19,9 @@ func tokenize(s string) []token {
 	for i := 0; i < len(s); {
 		switch s[i] {
 		case '*':
-			tokens = append(tokens, tokenWildcard)
+			if len(tokens) == 0 || tokens[len(tokens)-1] != tokenWildcard {
+				tokens = append(tokens, tokenWildcard)
+			}
 		case '|':
 			switch {
 			case i+1 < len(s) && s[i+1] == '|':
