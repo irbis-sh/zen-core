@@ -79,10 +79,7 @@ func (t *Tree[T]) Insert(pattern string, v T) {
 				prefix: tokens,
 				leaf:   []T{v},
 			}
-			parent.addEdge(edge[T]{
-				label: tokens[0],
-				node:  n,
-			})
+			parent.addEdge(tokens[0], n)
 			return
 		}
 
@@ -97,10 +94,7 @@ func (t *Tree[T]) Insert(pattern string, v T) {
 		}
 		parent.updateEdge(tokens[0], child)
 
-		child.addEdge(edge[T]{
-			label: n.prefix[commonPrefix],
-			node:  n,
-		})
+		child.addEdge(n.prefix[commonPrefix], n)
 		n.prefix = n.prefix[commonPrefix:]
 
 		l := []T{v}
@@ -111,10 +105,7 @@ func (t *Tree[T]) Insert(pattern string, v T) {
 				leaf:   l,
 				prefix: tokens[commonPrefix:],
 			}
-			child.addEdge(edge[T]{
-				label: tokens[commonPrefix],
-				node:  n,
-			})
+			child.addEdge(tokens[commonPrefix], n)
 		}
 		return
 	}
