@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
+	"golang.org/x/net/proxy"
 )
 
 // certGenerator is an interface capable of generating certificates for the proxy.
@@ -36,12 +37,13 @@ type Proxy struct {
 	server             *http.Server
 	requestTransport   http.RoundTripper
 	requestClient      *http.Client
+	dialer             proxy.Dialer
 	netDialer          *net.Dialer
 	transparentHosts   []string
 	transparentHostsMu sync.RWMutex
 }
 
-func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, error) {
+func NewProxy(filter filter, certGenerator certGenerator, port int, opts ...ProxyOption) (*Proxy, error) {
 	if filter == nil {
 		return nil, errors.New("filter is nil")
 	}
@@ -53,6 +55,11 @@ func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, err
 		filter:        filter,
 		certGenerator: certGenerator,
 		port:          port,
+		dialer:        proxy.Direct,
+	}
+
+	for _, opt := range opts {
+		opt(p)
 	}
 
 	p.netDialer = &net.Dialer{
@@ -61,7 +68,7 @@ func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, err
 		KeepAlive: 30 * time.Second,
 	}
 	p.requestTransport = &http.Transport{
-		Dial:                p.netDialer.Dial,
+		Dial:                p.dialer.Dial,
 		TLSHandshakeTimeout: 20 * time.Second,
 	}
 	p.requestClient = &http.Client{
@@ -360,7 +367,7 @@ func (p *Proxy) addTransparentHost(host string) {
 // tunnel tunnels the connection between the client and the remote server
 // without inspecting the traffic.
 func (p *Proxy) tunnel(w net.Conn, r *http.Request) {
-	remoteConn, err := net.Dial("tcp", r.Host)
+	remoteConn, err := p.dialer.Dial("tcp", r.Host)
 	if err != nil {
 		log.Printf("dialing remote(%s): %v", redacted.Redacted(r.Host), err)
 		w.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))

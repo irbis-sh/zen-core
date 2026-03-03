@@ -12,8 +12,7 @@ import (
 )
 
 func (p *Proxy) proxyWebsocketTLS(req *http.Request, tlsConfig *tls.Config, clientConn *tls.Conn) {
-	dialer := &tls.Dialer{NetDialer: p.netDialer, Config: tlsConfig}
-	targetConn, err := dialer.Dial("tcp", req.URL.Host)
+	targetConn, err := p.dialer.Dial("tcp", req.URL.Host)
 	if err != nil {
 		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err)
 		clientConn.Write([]byte("HTTP/1.1 502 Bad Gateway\r\n\r\n"))
@@ -21,15 +20,21 @@ func (p *Proxy) proxyWebsocketTLS(req *http.Request, tlsConfig *tls.Config, clie
 	}
 	defer targetConn.Close()
 
-	if err := websocketHandshake(req, targetConn, clientConn); err != nil {
+	// Upgrade the connection to TLS.
+	tlsTargetConn := tls.Client(targetConn, &tls.Config{
+		ServerName: req.URL.Hostname(),
+	})
+	defer tlsTargetConn.Close()
+
+	if err := websocketHandshake(req, tlsTargetConn, clientConn); err != nil {
 		return
 	}
 
-	linkBidirectionalTunnel(targetConn, clientConn)
+	linkBidirectionalTunnel(tlsTargetConn, clientConn)
 }
 
 func (p *Proxy) proxyWebsocket(w http.ResponseWriter, req *http.Request) {
-	targetConn, err := p.netDialer.Dial("tcp", req.URL.Host)
+	targetConn, err := p.dialer.Dial("tcp", req.URL.Host)
 	if err != nil {
 		w.WriteHeader(http.StatusBadGateway)
 		log.Printf("dialing websocket backend(%s): %v", redacted.Redacted(req.URL.Host), err)
