@@ -122,6 +122,9 @@ func (t *traverser[T]) traversePrefix(prefix []token, url string) {
 			if t.n.anchor != nil {
 				t.data = append(t.data, t.n.anchor.traverse("")...)
 			}
+			if t.n.wildcard != nil {
+				t.data = append(t.data, t.n.wildcard.traverse("")...)
+			}
 			if t.n.separator != nil {
 				t.data = append(t.data, t.n.separator.traverse("")...)
 			}
