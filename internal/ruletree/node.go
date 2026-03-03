@@ -114,17 +114,6 @@ func (n *node[T]) traverse(url string) []T {
 	t := traverser[T]{
 		n: n,
 	}
-
-	if len(url) == 0 {
-		if re := n.anchor; re != nil && re.isLeaf() {
-			t.data = append(t.data, re.leaf...)
-		}
-		if t.n.separator != nil && t.n.separator.isLeaf() {
-			t.data = append(t.data, t.n.separator.leaf...)
-		}
-		return t.data
-	}
-
 	t.traversePrefix(n.prefix, url)
 
 	return t.data
@@ -135,7 +124,14 @@ func (t *traverser[T]) traversePrefix(prefix []token, url string) {
 		if t.n.isLeaf() {
 			t.data = append(t.data, t.n.leaf...)
 		}
-		if url != "" {
+		if url == "" {
+			if t.n.anchor != nil {
+				t.data = append(t.data, t.n.anchor.traverse("")...)
+			}
+			if t.n.separator != nil {
+				t.data = append(t.data, t.n.separator.traverse("")...)
+			}
+		} else {
 			firstCh := url[0]
 			if isSeparator(firstCh) && t.n.separator != nil {
 				t.data = append(t.data, t.n.separator.traverse(url)...)
@@ -214,13 +210,11 @@ func (t *traverser[T]) traversePrefix(prefix []token, url string) {
 func (t *traverser[T]) traverseWildcardTail(url string) {
 	n := t.n
 
-	// If n is a leaf, the wildcard matches the entire remaining URL.
-	if n.isLeaf() {
-		t.data = append(t.data, n.leaf...)
-	}
+	// Wildcard matches the entire remaining URL.
+	t.traversePrefix(nil, "")
 
-	hasSep := t.n.separator != nil
-	hasWild := t.n.wildcard != nil
+	hasSep := n.separator != nil
+	hasWild := n.wildcard != nil
 
 	// Build a set of literal first-characters from the node's edges.
 	var literalSet byteset.Set
@@ -232,10 +226,10 @@ func (t *traverser[T]) traverseWildcardTail(url string) {
 		ch := url[i]
 
 		if hasSep && isSeparator(ch) {
-			t.data = append(t.data, t.n.separator.traverse(url[i:])...)
+			t.data = append(t.data, n.separator.traverse(url[i:])...)
 		}
 		if hasWild {
-			t.data = append(t.data, t.n.wildcard.traverse(url[i:])...)
+			t.data = append(t.data, n.wildcard.traverse(url[i:])...)
 		}
 		if literalSet.Has(ch) {
 			if child := n.getEdge(token(ch)); child != nil {

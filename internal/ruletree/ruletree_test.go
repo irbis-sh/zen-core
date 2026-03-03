@@ -104,6 +104,21 @@ func TestPatternMatching(t *testing.T) {
 				}
 			})
 		})
+
+		t.Run("branching", func(t *testing.T) {
+			t.Parallel()
+
+			tr := New[string]()
+			tr.Insert("e*", "e*")
+			tr.Insert("e*|", "e*|")
+			tr.Insert("e*^a", "e*^a")
+
+			got := tr.Get("https://example.com")
+			want := []string{"e*", "e*|"}
+			if !equalSets(got, want) {
+				t.Fatalf("got=%v, want=%v", got, want)
+			}
+		})
 	})
 
 	t.Run("separator matching", func(t *testing.T) {
