@@ -7,7 +7,6 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"strings"
 
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
@@ -73,17 +72,6 @@ func websocketHandshake(req *http.Request, targetConn io.ReadWriter, clientConn 
 	}
 
 	return nil
-}
-
-func headerContains(h http.Header, name, value string) bool {
-	for _, v := range h[name] {
-		for _, s := range strings.Split(v, ",") {
-			if strings.EqualFold(strings.TrimSpace(s), value) {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func isWS(r *http.Request) bool {
