@@ -12,12 +12,26 @@ import (
 )
 
 func (p *Proxy) proxyWebsocketTLS(w http.ResponseWriter, req *http.Request) {
-	dialer := &tls.Dialer{NetDialer: p.netDialer, Config: &tls.Config{MinVersion: tls.VersionTLS12}}
-	hijackAndTunnelWebsocket(w, req, dialer.Dial)
+	hijackAndTunnelWebsocket(w, req, func(network, addr string) (net.Conn, error) {
+		// Dial through the external proxy (or direct), then upgrade to TLS.
+		rawConn, err := p.dialer.Dial(network, addr)
+		if err != nil {
+			return nil, err
+		}
+		tlsConn := tls.Client(rawConn, &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			ServerName: req.URL.Hostname(),
+		})
+		if err := tlsConn.Handshake(); err != nil {
+			rawConn.Close()
+			return nil, err
+		}
+		return tlsConn, nil
+	})
 }
 
 func (p *Proxy) proxyWebsocket(w http.ResponseWriter, req *http.Request) {
-	hijackAndTunnelWebsocket(w, req, p.netDialer.Dial)
+	hijackAndTunnelWebsocket(w, req, p.dialer.Dial)
 }
 
 func hijackAndTunnelWebsocket(w http.ResponseWriter, req *http.Request, dial func(network, addr string) (net.Conn, error)) {
@@ -44,6 +58,7 @@ func hijackAndTunnelWebsocket(w http.ResponseWriter, req *http.Request, dial fun
 	if err := websocketHandshake(req, targetConn, clientConn); err != nil {
 		return
 	}
+
 	linkBidirectionalTunnel(targetConn, clientConn)
 }
 
