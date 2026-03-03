@@ -14,6 +14,7 @@ import (
 	"net/textproto"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
@@ -41,6 +42,11 @@ type Proxy struct {
 	netDialer          *net.Dialer
 	transparentHosts   []string
 	transparentHostsMu sync.RWMutex
+	// h2IncompatibleHosts tracks hosts whose clients negotiate h2 via ALPN
+	// but cannot actually speak HTTP/2. Subsequent connections to these hosts
+	// offer only http/1.1 in the client-facing TLS config.
+	h2IncompatibleHosts   []string
+	h2IncompatibleHostsMu sync.RWMutex
 }
 
 func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, error) {
@@ -260,9 +266,14 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 		return
 	}
 
+	nextProtos := []string{"h2", "http/1.1"}
+	if p.isH2Incompatible(host) {
+		nextProtos = []string{"http/1.1"}
+	}
+
 	tlsConfig := &tls.Config{
 		Certificates: []tls.Certificate{*tlsCert},
-		NextProtos:   []string{"h2", "http/1.1"},
+		NextProtos:   nextProtos,
 		MinVersion:   tls.VersionTLS12,
 	}
 
@@ -283,25 +294,35 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request) {
 
 	ln := newSingleConnListener(tlsConn)
 
+	var handlerCalled atomic.Bool
 	srv := &http.Server{
-		Handler:   p.connectHandler(connReq, host, ln),
+		Handler:   p.connectHandler(connReq, host, ln, &handlerCalled),
 		TLSConfig: tlsConfig,
 		ConnState: func(_ net.Conn, state http.ConnState) {
 			if state == http.StateClosed {
 				ln.Close()
 			}
 		},
-		ReadHeaderTimeout: 20 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 		log.Printf("serving connection(%s): %v", redacted.Redacted(connReq.Host), err)
 	}
+
+	// If the handler was never called and h2 was negotiated, the client
+	// likely advertised h2 via ALPN but cannot actually speak HTTP/2.
+	// Mark the host so subsequent connections offer only http/1.1.
+	if !handlerCalled.Load() && tlsConn.ConnectionState().NegotiatedProtocol == "h2" {
+		log.Printf("adding %s to h2-incompatible hosts", redacted.Redacted(host))
+		p.addH2IncompatibleHost(host)
+	}
 }
 
 // connectHandler returns an http.Handler that processes requests on a CONNECT-tunnelled TLS connection.
-func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleConnListener) http.Handler {
+func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleConnListener, handlerCalled *atomic.Bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		handlerCalled.Store(true)
 		req.URL.Host = connReq.Host
 		req.URL.Scheme = "https"
 		req.RequestURI = ""
@@ -419,6 +440,27 @@ func (p *Proxy) addTransparentHost(host string) {
 	defer p.transparentHostsMu.Unlock()
 
 	p.transparentHosts = append(p.transparentHosts, host)
+}
+
+// isH2Incompatible reports whether the host has been identified as unable
+// to speak HTTP/2 despite negotiating it via ALPN.
+func (p *Proxy) isH2Incompatible(host string) bool {
+	p.h2IncompatibleHostsMu.RLock()
+	defer p.h2IncompatibleHostsMu.RUnlock()
+
+	for _, h := range p.h2IncompatibleHosts {
+		if host == h || strings.HasSuffix(host, "."+h) {
+			return true
+		}
+	}
+	return false
+}
+
+func (p *Proxy) addH2IncompatibleHost(host string) {
+	p.h2IncompatibleHostsMu.Lock()
+	defer p.h2IncompatibleHostsMu.Unlock()
+
+	p.h2IncompatibleHosts = append(p.h2IncompatibleHosts, host)
 }
 
 // tunnel tunnels the connection between the client and the remote server
