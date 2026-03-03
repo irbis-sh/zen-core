@@ -38,8 +38,6 @@ func (n *node[T]) addEdge(label token, e *node[T]) {
 	case tokenWildcard:
 		n.wildcard = e
 		return
-	case tokenDomainBoundary:
-		return
 	case tokenSeparator:
 		n.separator = e
 		return
@@ -63,8 +61,6 @@ func (n *node[T]) updateEdge(label token, node *node[T]) {
 	case tokenWildcard:
 		n.wildcard = node
 		return
-	case tokenDomainBoundary:
-		return
 	case tokenSeparator:
 		n.separator = node
 		return
@@ -86,8 +82,6 @@ func (n *node[T]) getEdge(label token) *node[T] {
 	switch label {
 	case tokenWildcard:
 		return n.wildcard
-	case tokenDomainBoundary:
-		return nil
 	case tokenSeparator:
 		return n.separator
 	case tokenAnchor:
@@ -159,7 +153,6 @@ func (t *traverser[T]) traversePrefix(prefix []token, url string) {
 		} else {
 			nextTok := prefix[1]
 			switch prefix[1] {
-			case tokenWildcard:
 			case tokenAnchor:
 				t.traversePrefix(prefix[1:], "")
 			case tokenSeparator:

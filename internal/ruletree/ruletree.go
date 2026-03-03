@@ -49,6 +49,12 @@ func (t *Tree[T]) Insert(pattern string, v T) {
 
 	tokens := tokenize(pattern)
 
+	for i := 1; i < len(tokens); i++ {
+		if tokens[i] == tokenDomainBoundary {
+			return
+		}
+	}
+
 	t.insertMu.Lock()
 	defer t.insertMu.Unlock()
 

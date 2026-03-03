@@ -9,6 +9,17 @@ import (
 func TestInsert(t *testing.T) {
 	t.Parallel()
 
+	t.Run("non-initial domain boundary is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		tr := New[string]()
+		tr.Insert("a||b", "a||b")
+
+		if len(tr.root.edges) != 0 {
+			t.Fatal("expected tr.root.edges to be empty")
+		}
+	})
+
 	t.Run("duplicate values", func(t *testing.T) {
 		t.Parallel()
 
