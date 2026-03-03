@@ -24,6 +24,15 @@ func (t *Tree[T]) Compact() {
 		n.edges = trimSlice(n.edges)
 		n.prefix = trimSlice(n.prefix)
 
+		if n.wildcard != nil {
+			stack = append(stack, n.wildcard)
+		}
+		if n.separator != nil {
+			stack = append(stack, n.separator)
+		}
+		if n.anchor != nil {
+			stack = append(stack, n.anchor)
+		}
 		for _, e := range n.edges {
 			stack = append(stack, e.node)
 		}

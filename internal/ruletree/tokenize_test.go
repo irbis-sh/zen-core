@@ -28,6 +28,18 @@ func TestTokenize(t *testing.T) {
 			[]token{tokenWildcard, 'a', tokenWildcard},
 		},
 		{
+			"**",
+			[]token{tokenWildcard},
+		},
+		{
+			"a**b",
+			[]token{'a', tokenWildcard, 'b'},
+		},
+		{
+			"***a***",
+			[]token{tokenWildcard, 'a', tokenWildcard},
+		},
+		{
 			"||",
 			[]token{tokenDomainBoundary},
 		},

@@ -1,13 +1,18 @@
-import { describe, test, expect } from '@jest/globals';
+import { afterAll, beforeAll, describe, test, expect } from '@jest/globals';
 
 import { parseRawSelectorList } from '.';
+
+function plan(input: string): string {
+  return parseRawSelectorList(input)
+    .map((t) => t.map((t) => t.toString()).join(' '))
+    .join(', ');
+}
 
 describe('parseSelectorList', () => {
   test.each<[string, string]>([
     ['div', 'RawQuery(div)'],
     ['div span', 'RawQuery(div span)'],
     ['a[href^="http"]', 'RawQuery(a[href^="http"])'],
-    ['div:not(.ad)', 'RawQuery(div) :Not(...)'],
 
     // Pure CSS with combinators is bridged into a single Raw
     ['div>.x+span~a', 'RawQuery(div>.x+span~a)'],
@@ -41,27 +46,89 @@ describe('parseSelectorList', () => {
 
     // Selector lists
     ['.banner, .ad', 'RawQuery(.banner), RawQuery(.ad)'],
-    [
-      'div:contains(ad) span:has(.banner), > .x + p, code',
-      'RawQuery(div) :Contains(ad) RawQuery(span) :Has(...), ChildComb RawMatches(.x) NextSiblComb RawMatches(p), RawQuery(code)',
-    ],
 
     // Combinators between a mix of raw and extended tokens
     ['#parent:min-text-length(2) *', 'RawQuery(#parent) :MinTextLength(2) RawQuery(*)'],
     [':min-text-length(2) > div', 'RawQuery(*) :MinTextLength(2) RawQuery(:scope>div)'],
     [':min-text-length(2) + div', 'RawQuery(*) :MinTextLength(2) NextSiblComb RawMatches(div)'],
-    [
-      ':min-text-length(2) + div > div:is(.class) + span',
-      'RawQuery(*) :MinTextLength(2) NextSiblComb RawMatches(div) RawQuery(:scope>div) :Is(...) NextSiblComb RawMatches(span)',
-    ],
   ])('parse %j', (input, expected) => {
-    const got = parseRawSelectorList(input)
-      .map((t) => t.map((t) => t.toString()).join(' '))
-      .join(', ');
-    expect(got).toEqual(expected);
+    expect(plan(input)).toEqual(expected);
   });
 
   test('throws on dangling combinator', () => {
     expect(() => parseRawSelectorList('div >')).toThrow(/dangling combinator/i);
+  });
+
+  describe('with native :has/:is/:not support ON', () => {
+    let origCSS: typeof window.CSS;
+
+    beforeAll(() => {
+      origCSS = window.CSS;
+      window.CSS = {
+        supports: () => true,
+        escape: (s: string) => s,
+      } as unknown as typeof CSS;
+    });
+
+    afterAll(() => {
+      window.CSS = origCSS;
+    });
+
+    test.each<[string, string]>([
+      // :not with standard-only args -> single RawQuery
+      ['div:not(.ad)', 'RawQuery(div:not(.ad))'],
+
+      // :has with standard-only args -> merged into raw
+      [
+        'div:contains(ad) span:has(.banner), > .x + p, code',
+        'RawQuery(div) :Contains(ad) RawQuery(span:has(.banner)), ChildComb RawMatches(.x) NextSiblComb RawMatches(p), RawQuery(code)',
+      ],
+
+      // :is with standard-only args -> stays in raw run
+      [
+        ':min-text-length(2) + div > div:is(.class) + span',
+        'RawQuery(*) :MinTextLength(2) NextSiblComb RawMatches(div) RawQuery(:scope>div:is(.class)+span)',
+      ],
+
+      // :has with non-standard arg -> extended
+      [':has(:min-text-length(42))', 'RawQuery(*) :Has(...)'],
+    ])('parse %j', (input, expected) => {
+      expect(plan(input)).toEqual(expected);
+    });
+  });
+
+  describe('with native support OFF', () => {
+    let origCSS: typeof window.CSS;
+
+    beforeAll(() => {
+      origCSS = window.CSS;
+      window.CSS = {
+        supports: () => false,
+        escape: (s: string) => s,
+      } as unknown as typeof CSS;
+    });
+
+    afterAll(() => {
+      window.CSS = origCSS;
+    });
+
+    test.each<[string, string]>([
+      // :not with standard-only args -> extended path
+      ['div:not(.ad)', 'RawQuery(div) :Not(...)'],
+
+      // :has with standard-only args -> extended path
+      [
+        'div:contains(ad) span:has(.banner), > .x + p, code',
+        'RawQuery(div) :Contains(ad) RawQuery(span) :Has(...), ChildComb RawMatches(.x) NextSiblComb RawMatches(p), RawQuery(code)',
+      ],
+
+      // :is with standard-only args -> extended path
+      [
+        ':min-text-length(2) + div > div:is(.class) + span',
+        'RawQuery(*) :MinTextLength(2) NextSiblComb RawMatches(div) RawQuery(:scope>div) :Is(...) NextSiblComb RawMatches(span)',
+      ],
+    ])('parse %j', (input, expected) => {
+      expect(plan(input)).toEqual(expected);
+    });
   });
 });
