@@ -154,7 +154,6 @@ func (t *traverser[T]) traversePrefix(prefix []token, url string) {
 		if len(prefix) == 1 {
 			t.traverseWildcardTail(url)
 		} else {
-			nextTok := prefix[1]
 			switch prefix[1] {
 			case tokenAnchor:
 				t.traversePrefix(prefix[1:], "")
@@ -165,7 +164,7 @@ func (t *traverser[T]) traversePrefix(prefix []token, url string) {
 					}
 				}
 			default:
-				target := byte(nextTok)
+				target := byte(prefix[1])
 				off := 0
 				for off < len(url) {
 					idx := strings.IndexByte(url[off:], target)
