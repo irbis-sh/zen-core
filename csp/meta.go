@@ -1,13 +1,13 @@
 package csp
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/ZenPrivacy/zen-core/httprewrite"
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // patchMetaCSPsBatch mutates HTML <meta> tags for multiple CSP operations in a single pass.
@@ -28,15 +28,16 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 				return
 
 			case html.StartTagToken, html.SelfClosingTagToken:
-				if name, _ := z.TagName(); !bytes.Equal(name, []byte("meta")) {
-					dst.Write(z.Raw())
+				raw := append([]byte{}, z.Raw()...) // z.Token() modifies the underlying buffer, so we need to make a copy
+				tok := z.Token()
+
+				if tok.DataAtom != atom.Meta {
+					dst.Write(raw)
 					continue
 				}
 
-				tok := z.Token()
-
 				var hasCSP bool
-				contentInd := -1 // Track the index of the content= attribute.
+				contentInd := -1 // Track the index of the content= attribute
 
 				for i, a := range tok.Attr {
 					if strings.EqualFold(a.Key, "http-equiv") &&
@@ -50,11 +51,11 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 				}
 
 				if !hasCSP || contentInd == -1 || tok.Attr[contentInd].Val == "" {
-					dst.Write(z.Raw())
+					dst.Write(raw)
 					continue
 				}
 
-				// Apply all operations to this meta tag's CSP.
+				// Apply all operations to this meta tag's CSP
 				var changed bool
 				contentVal := tok.Attr[contentInd].Val
 				patchedContent := contentVal
@@ -68,7 +69,7 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 				}
 
 				if !changed {
-					dst.Write(z.Raw())
+					dst.Write(raw)
 					continue
 				}
 
