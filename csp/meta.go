@@ -8,7 +8,6 @@ import (
 
 	"github.com/ZenPrivacy/zen-core/httprewrite"
 	"golang.org/x/net/html"
-	"golang.org/x/net/html/atom"
 )
 
 // patchMetaCSPsBatch mutates HTML <meta> tags for multiple CSP operations in a single pass.
@@ -29,35 +28,37 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 				return
 
 			case html.StartTagToken, html.SelfClosingTagToken:
-				raw := append([]byte{}, z.Raw()...)
-				tok := z.Token()
-				if tok.DataAtom != atom.Meta {
-					dst.Write(raw)
+				if name, _ := z.TagName(); !bytes.Equal(name, []byte("meta")) {
+					dst.Write(z.Raw())
 					continue
 				}
 
-				var hasCSP bool
-				var contentVal string
+				tok := z.Token()
 
-				for _, a := range tok.Attr {
+				var hasCSP bool
+				contentInd := -1 // Track the index of the content= attribute.
+
+				for i, a := range tok.Attr {
 					if strings.EqualFold(a.Key, "http-equiv") &&
 						strings.EqualFold(a.Val, "content-security-policy") {
 						hasCSP = true
 					}
 
 					if strings.EqualFold(a.Key, "content") {
-						contentVal = a.Val
+						contentInd = i
 					}
 				}
 
-				if !hasCSP || contentVal == "" {
-					dst.Write(raw)
+				if !hasCSP || contentInd == -1 || tok.Attr[contentInd].Val == "" {
+					dst.Write(z.Raw())
 					continue
 				}
 
-				// Apply all operations to this meta tag's CSP
+				// Apply all operations to this meta tag's CSP.
+				var changed bool
+				contentVal := tok.Attr[contentInd].Val
 				patchedContent := contentVal
-				changed := false
+
 				for _, op := range operations {
 					patched, patchChanged := patchPolicies([]string{patchedContent}, op.Nonce, op.Kind, op.ResourceURL)
 					if patchChanged {
@@ -67,12 +68,12 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 				}
 
 				if !changed {
-					dst.Write(raw)
+					dst.Write(z.Raw())
 					continue
 				}
 
-				patchedRaw := replaceContentValue(raw, patchedContent)
-				dst.Write(patchedRaw)
+				tok.Attr[contentInd].Val = patchedContent
+				dst.Write([]byte(tok.String()))
 
 			default:
 				dst.Write(z.Raw())
@@ -81,36 +82,4 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 	})
 
 	return err
-}
-
-func replaceContentValue(raw []byte, newVal string) []byte {
-	lower := bytes.ToLower(raw)
-	i := bytes.Index(lower, []byte("content="))
-
-	if i == -1 {
-		return raw
-	}
-
-	afterKey := raw[i+len("content="):]
-	if len(afterKey) == 0 {
-		return raw
-	}
-
-	quote := afterKey[0]
-	if quote != '"' && quote != '\'' {
-		return raw
-	}
-
-	valueStart := i + len("content=") + 1
-	valueEndRel := bytes.IndexByte(raw[valueStart:], quote)
-	if valueEndRel == -1 {
-		return raw
-	}
-	valueEnd := valueStart + valueEndRel
-
-	out := make([]byte, 0, valueStart+len(newVal)+(len(raw)-valueEnd))
-	out = append(out, raw[:valueStart]...)
-	out = append(out, newVal...)
-	out = append(out, raw[valueEnd:]...)
-	return out
 }
