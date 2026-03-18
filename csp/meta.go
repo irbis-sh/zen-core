@@ -45,7 +45,7 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 						hasCSP = true
 					}
 
-					if strings.EqualFold(a.Key, "content") {
+					if strings.EqualFold(a.Key, "content") && contentInd == -1 {
 						contentInd = i
 					}
 				}
