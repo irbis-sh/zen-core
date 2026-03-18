@@ -1,7 +1,6 @@
 package csp
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"strings"
@@ -29,35 +28,38 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 				return
 
 			case html.StartTagToken, html.SelfClosingTagToken:
-				raw := append([]byte{}, z.Raw()...)
+				raw := append([]byte{}, z.Raw()...) // z.Token() modifies the underlying buffer, so we need to make a copy
 				tok := z.Token()
+
 				if tok.DataAtom != atom.Meta {
 					dst.Write(raw)
 					continue
 				}
 
 				var hasCSP bool
-				var contentVal string
+				contentInd := -1 // Track the index of the content= attribute
 
-				for _, a := range tok.Attr {
+				for i, a := range tok.Attr {
 					if strings.EqualFold(a.Key, "http-equiv") &&
 						strings.EqualFold(a.Val, "content-security-policy") {
 						hasCSP = true
 					}
 
-					if strings.EqualFold(a.Key, "content") {
-						contentVal = a.Val
+					if strings.EqualFold(a.Key, "content") && contentInd == -1 {
+						contentInd = i
 					}
 				}
 
-				if !hasCSP || contentVal == "" {
+				if !hasCSP || contentInd == -1 || tok.Attr[contentInd].Val == "" {
 					dst.Write(raw)
 					continue
 				}
 
 				// Apply all operations to this meta tag's CSP
+				var changed bool
+				contentVal := tok.Attr[contentInd].Val
 				patchedContent := contentVal
-				changed := false
+
 				for _, op := range operations {
 					patched, patchChanged := patchPolicies([]string{patchedContent}, op.Nonce, op.Kind, op.ResourceURL)
 					if patchChanged {
@@ -71,8 +73,8 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 					continue
 				}
 
-				patchedRaw := replaceContentValue(raw, patchedContent)
-				dst.Write(patchedRaw)
+				tok.Attr[contentInd].Val = patchedContent
+				dst.Write([]byte(tok.String()))
 
 			default:
 				dst.Write(z.Raw())
@@ -81,36 +83,4 @@ func patchMetaCSPsBatch(res *http.Response, operations []PatchOperation) error {
 	})
 
 	return err
-}
-
-func replaceContentValue(raw []byte, newVal string) []byte {
-	lower := bytes.ToLower(raw)
-	i := bytes.Index(lower, []byte("content="))
-
-	if i == -1 {
-		return raw
-	}
-
-	afterKey := raw[i+len("content="):]
-	if len(afterKey) == 0 {
-		return raw
-	}
-
-	quote := afterKey[0]
-	if quote != '"' && quote != '\'' {
-		return raw
-	}
-
-	valueStart := i + len("content=") + 1
-	valueEndRel := bytes.IndexByte(raw[valueStart:], quote)
-	if valueEndRel == -1 {
-		return raw
-	}
-	valueEnd := valueStart + valueEndRel
-
-	out := make([]byte, 0, valueStart+len(newVal)+(len(raw)-valueEnd))
-	out = append(out, raw[:valueStart]...)
-	out = append(out, newVal...)
-	out = append(out, raw[valueEnd:]...)
-	return out
 }

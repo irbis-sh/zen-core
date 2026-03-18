@@ -164,7 +164,7 @@ func (t *traverser[T]) traversePrefix(prefix []token, url string) {
 					}
 				}
 			default:
-				target := byte(prefix[1])
+				target := byte(prefix[1]) // #nosec G115 -- literal character tokens are always in ASCII byte range
 				off := 0
 				for off < len(url) {
 					idx := strings.IndexByte(url[off:], target)

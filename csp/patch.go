@@ -110,7 +110,7 @@ func patchPolicies(policies []string, nonce string, kind tagKind, resourceURL st
 
 		newValue := appendToken(bestValue, appendValue)
 		rawDirs[bestIdx] = bestName + " " + newValue
-		policies[i] = strings.Join(rawDirs, "; ")
+		policies[i] = strings.Join(rawDirs, "; ") // #nosec G602 -- i is from range over policies
 		changed = true
 	}
 
