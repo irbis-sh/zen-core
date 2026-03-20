@@ -3,6 +3,7 @@ package exceptionrule
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -155,19 +156,19 @@ func (er *ExceptionRule) ParseModifiers(modifiers []string) error {
 			return err
 		}
 
-		switch m := modifier.(type) {
+		switch typed := modifier.(type) {
 		case exceptionModifier:
 			if isOr {
-				er.Modifiers.OrModifiers = append(er.Modifiers.OrModifiers, m)
+				er.Modifiers.OrModifiers = append(er.Modifiers.OrModifiers, typed)
 			} else {
-				er.Modifiers.AndModifiers = append(er.Modifiers.AndModifiers, m)
+				er.Modifiers.AndModifiers = append(er.Modifiers.AndModifiers, typed)
 			}
 		case rulemodifiers.ReqResModifier:
-			er.ReqResModifiers = append(er.ReqResModifiers, m)
+			er.ReqResModifiers = append(er.ReqResModifiers, typed)
 		case rulemodifiers.QueryModifier:
-			er.QueryModifiers = append(er.QueryModifiers, m)
+			er.QueryModifiers = append(er.QueryModifiers, typed)
 		default:
-			panic(fmt.Sprintf("got unknown modifier type %T for modifier %s", modifier, m))
+			log.Fatalf("got unknown modifier type %T for modifier %s", modifier, m)
 		}
 
 	}

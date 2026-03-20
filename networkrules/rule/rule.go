@@ -96,17 +96,17 @@ func (rm *Rule) ParseModifiers(modifiers []string) error {
 			return err
 		}
 
-		switch m := modifier.(type) {
+		switch typed := modifier.(type) {
 		case rulemodifiers.MatchingModifier:
 			if isOr {
-				rm.MatchingModifiers.Or = append(rm.MatchingModifiers.Or, m)
+				rm.MatchingModifiers.Or = append(rm.MatchingModifiers.Or, typed)
 			} else {
-				rm.MatchingModifiers.And = append(rm.MatchingModifiers.And, m)
+				rm.MatchingModifiers.And = append(rm.MatchingModifiers.And, typed)
 			}
 		case rulemodifiers.ReqResModifier:
-			rm.ReqResModifiers = append(rm.ReqResModifiers, m)
+			rm.ReqResModifiers = append(rm.ReqResModifiers, typed)
 		case rulemodifiers.QueryModifier:
-			rm.QueryModifiers = append(rm.QueryModifiers, m)
+			rm.QueryModifiers = append(rm.QueryModifiers, typed)
 		default:
 			log.Fatalf("got unknown modifier type %T for modifier %s", modifier, m)
 		}
