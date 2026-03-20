@@ -3,6 +3,7 @@ package exceptionrule
 import (
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -14,9 +15,10 @@ type ExceptionRule struct {
 	RawRule    string
 	FilterName *string
 
-	Modifiers          ExceptionModifiers
-	ModifyingModifiers []rulemodifiers.ModifyingModifier
-	Document           bool
+	Modifiers       ExceptionModifiers
+	ReqResModifiers []rulemodifiers.ReqResModifier
+	QueryModifiers  []rulemodifiers.QueryModifier
+	Document        bool
 }
 
 type ExceptionModifiers struct {
@@ -35,13 +37,13 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 		return false
 	}
 
-	if len(er.Modifiers.AndModifiers) == 0 && len(er.Modifiers.OrModifiers) == 0 && len(er.ModifyingModifiers) == 0 {
+	if len(er.Modifiers.AndModifiers) == 0 && len(er.Modifiers.OrModifiers) == 0 && len(er.ReqResModifiers) == 0 && len(er.QueryModifiers) == 0 {
 		return true
 	}
 
 	for _, exc := range er.Modifiers.AndModifiers {
 		found := false
-		for _, basic := range r.MatchingModifiers.AndModifiers {
+		for _, basic := range r.MatchingModifiers.And {
 			if exc.Cancels(basic) {
 				found = true
 				break
@@ -55,7 +57,7 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 	if len(er.Modifiers.OrModifiers) > 0 {
 		found := false
 		for _, exc := range er.Modifiers.OrModifiers {
-			for _, basic := range r.MatchingModifiers.OrModifiers {
+			for _, basic := range r.MatchingModifiers.Or {
 				if exc.Cancels(basic) {
 					found = true
 					break
@@ -70,9 +72,22 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 		}
 	}
 
-	for _, exc := range er.ModifyingModifiers {
+	for _, exc := range er.ReqResModifiers {
 		found := false
-		for _, basic := range r.ModifyingModifiers {
+		for _, basic := range r.ReqResModifiers {
+			if exc.Cancels(basic) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	for _, exc := range er.QueryModifiers {
+		found := false
+		for _, basic := range r.QueryModifiers {
 			if exc.Cancels(basic) {
 				found = true
 				break
@@ -141,16 +156,19 @@ func (er *ExceptionRule) ParseModifiers(modifiers []string) error {
 			return err
 		}
 
-		if matchingModifier, ok := modifier.(exceptionModifier); ok {
+		switch typed := modifier.(type) {
+		case exceptionModifier:
 			if isOr {
-				er.Modifiers.OrModifiers = append(er.Modifiers.OrModifiers, matchingModifier)
+				er.Modifiers.OrModifiers = append(er.Modifiers.OrModifiers, typed)
 			} else {
-				er.Modifiers.AndModifiers = append(er.Modifiers.AndModifiers, matchingModifier)
+				er.Modifiers.AndModifiers = append(er.Modifiers.AndModifiers, typed)
 			}
-		} else if modifyingModifier, ok := modifier.(rulemodifiers.ModifyingModifier); ok {
-			er.ModifyingModifiers = append(er.ModifyingModifiers, modifyingModifier)
-		} else {
-			panic(fmt.Sprintf("got unknown modifier type %T for modifier %s", modifier, m))
+		case rulemodifiers.ReqResModifier:
+			er.ReqResModifiers = append(er.ReqResModifiers, typed)
+		case rulemodifiers.QueryModifier:
+			er.QueryModifiers = append(er.QueryModifiers, typed)
+		default:
+			log.Fatalf("got unknown modifier type %T for modifier %s", modifier, m)
 		}
 
 	}

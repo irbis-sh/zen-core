@@ -2,24 +2,31 @@ package rulemodifiers
 
 import (
 	"net/http"
+	"net/url"
 )
 
 // Modifier is a Modifier of a rule.
 type Modifier interface {
-	Parse(modifier string) error
+	Parse(string) error
+	Cancels(Modifier) bool
 }
 
 // MatchingModifier defines whether a rule matches a request.
 type MatchingModifier interface {
 	Modifier
-	ShouldMatchReq(req *http.Request) bool
-	ShouldMatchRes(res *http.Response) bool
+	ShouldMatchReq(*http.Request) bool
+	ShouldMatchRes(*http.Response) bool
 }
 
-// modifyingModifier modifies a request.
-type ModifyingModifier interface {
+// ReqResModifier modifies requests and responses.
+type ReqResModifier interface {
 	Modifier
-	ModifyReq(req *http.Request) (modified bool)
-	ModifyRes(res *http.Response) (modified bool, err error)
-	Cancels(Modifier) bool
+	ModifyReq(*http.Request) bool
+	ModifyRes(*http.Response) (bool, error)
+}
+
+// QueryModifier modifies request query parameters.
+type QueryModifier interface {
+	Modifier
+	ModifyQuery(url.Values) bool
 }
