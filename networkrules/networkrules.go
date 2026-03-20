@@ -132,6 +132,7 @@ func (nr *NetworkRules) ModifyReq(req *http.Request) (appliedRules []rule.Rule, 
 		query = req.URL.Query()
 	}
 
+	var queryModified bool
 outer:
 	for _, r := range primaryRules {
 		for _, ex := range exceptions {
@@ -145,7 +146,10 @@ outer:
 
 		modified := r.ModifyReq(req)
 		if query != nil {
-			modified = r.ModifyReqQuery(query) || modified
+			if r.ModifyReqQuery(query) {
+				queryModified = true
+				modified = true
+			}
 		}
 
 		if modified {
@@ -153,7 +157,9 @@ outer:
 		}
 	}
 
-	if len(appliedRules) > 0 && query != nil {
+	if queryModified {
+		// Re-encoding the same query params may cause subtle normalization changes
+		// (e.g. parameter reordering), so only do it if they were actually modified.
 		req.URL.RawQuery = query.Encode()
 	}
 
