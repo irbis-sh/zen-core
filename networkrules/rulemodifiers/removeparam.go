@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-type removeparamKind int
+type removeparamKind int8
 
 const (
 	removeparamKindGeneric removeparamKind = iota
@@ -78,8 +78,8 @@ func (rm *RemoveParamModifier) ModifyQuery(query url.Values) bool {
 	case removeparamKindGeneric:
 		for param := range query {
 			query.Del(param)
-			modified = true
 		}
+		modified = true
 	case removeparamKindRegexp:
 		for param, values := range query {
 			filtered := values[:0]
