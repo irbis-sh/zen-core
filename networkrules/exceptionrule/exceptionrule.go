@@ -14,10 +14,10 @@ type ExceptionRule struct {
 	RawRule    string
 	FilterName *string
 
-	Modifiers          ExceptionModifiers
-	ModifyingModifiers []rulemodifiers.ReqResModifier
-	QueryModifiers     []rulemodifiers.QueryModifier
-	Document           bool
+	Modifiers       ExceptionModifiers
+	ReqResModifiers []rulemodifiers.ReqResModifier
+	QueryModifiers  []rulemodifiers.QueryModifier
+	Document        bool
 }
 
 type ExceptionModifiers struct {
@@ -36,7 +36,7 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 		return false
 	}
 
-	if len(er.Modifiers.AndModifiers) == 0 && len(er.Modifiers.OrModifiers) == 0 && len(er.ModifyingModifiers) == 0 && len(er.QueryModifiers) == 0 {
+	if len(er.Modifiers.AndModifiers) == 0 && len(er.Modifiers.OrModifiers) == 0 && len(er.ReqResModifiers) == 0 && len(er.QueryModifiers) == 0 {
 		return true
 	}
 
@@ -71,7 +71,7 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 		}
 	}
 
-	for _, exc := range er.ModifyingModifiers {
+	for _, exc := range er.ReqResModifiers {
 		found := false
 		for _, basic := range r.ReqResModifiers {
 			if exc.Cancels(basic) {
@@ -163,7 +163,7 @@ func (er *ExceptionRule) ParseModifiers(modifiers []string) error {
 				er.Modifiers.AndModifiers = append(er.Modifiers.AndModifiers, m)
 			}
 		case rulemodifiers.ReqResModifier:
-			er.ModifyingModifiers = append(er.ModifyingModifiers, m)
+			er.ReqResModifiers = append(er.ReqResModifiers, m)
 		case rulemodifiers.QueryModifier:
 			er.QueryModifiers = append(er.QueryModifiers, m)
 		default:
