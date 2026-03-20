@@ -16,7 +16,7 @@ type JSONPruneModifier struct {
 	commands []string
 }
 
-var _ ModifyingModifier = (*JSONPruneModifier)(nil)
+var _ ReqResModifier = (*JSONPruneModifier)(nil)
 
 var ErrInvalidJSONPruneModifier = errors.New("invalid jsonprune modifier")
 

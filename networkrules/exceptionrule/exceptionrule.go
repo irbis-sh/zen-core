@@ -15,7 +15,8 @@ type ExceptionRule struct {
 	FilterName *string
 
 	Modifiers          ExceptionModifiers
-	ModifyingModifiers []rulemodifiers.ModifyingModifier
+	ModifyingModifiers []rulemodifiers.ReqResModifier
+	QueryModifiers     []rulemodifiers.QueryModifier
 	Document           bool
 }
 
@@ -35,13 +36,13 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 		return false
 	}
 
-	if len(er.Modifiers.AndModifiers) == 0 && len(er.Modifiers.OrModifiers) == 0 && len(er.ModifyingModifiers) == 0 {
+	if len(er.Modifiers.AndModifiers) == 0 && len(er.Modifiers.OrModifiers) == 0 && len(er.ModifyingModifiers) == 0 && len(er.QueryModifiers) == 0 {
 		return true
 	}
 
 	for _, exc := range er.Modifiers.AndModifiers {
 		found := false
-		for _, basic := range r.MatchingModifiers.AndModifiers {
+		for _, basic := range r.MatchingModifiers.And {
 			if exc.Cancels(basic) {
 				found = true
 				break
@@ -55,7 +56,7 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 	if len(er.Modifiers.OrModifiers) > 0 {
 		found := false
 		for _, exc := range er.Modifiers.OrModifiers {
-			for _, basic := range r.MatchingModifiers.OrModifiers {
+			for _, basic := range r.MatchingModifiers.Or {
 				if exc.Cancels(basic) {
 					found = true
 					break
@@ -72,7 +73,20 @@ func (er *ExceptionRule) Cancels(r *rule.Rule) bool {
 
 	for _, exc := range er.ModifyingModifiers {
 		found := false
-		for _, basic := range r.ModifyingModifiers {
+		for _, basic := range r.ReqResModifiers {
+			if exc.Cancels(basic) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	for _, exc := range er.QueryModifiers {
+		found := false
+		for _, basic := range r.QueryModifiers {
 			if exc.Cancels(basic) {
 				found = true
 				break
@@ -141,15 +155,18 @@ func (er *ExceptionRule) ParseModifiers(modifiers []string) error {
 			return err
 		}
 
-		if matchingModifier, ok := modifier.(exceptionModifier); ok {
+		switch m := modifier.(type) {
+		case exceptionModifier:
 			if isOr {
-				er.Modifiers.OrModifiers = append(er.Modifiers.OrModifiers, matchingModifier)
+				er.Modifiers.OrModifiers = append(er.Modifiers.OrModifiers, m)
 			} else {
-				er.Modifiers.AndModifiers = append(er.Modifiers.AndModifiers, matchingModifier)
+				er.Modifiers.AndModifiers = append(er.Modifiers.AndModifiers, m)
 			}
-		} else if modifyingModifier, ok := modifier.(rulemodifiers.ModifyingModifier); ok {
-			er.ModifyingModifiers = append(er.ModifyingModifiers, modifyingModifier)
-		} else {
+		case rulemodifiers.ReqResModifier:
+			er.ModifyingModifiers = append(er.ModifyingModifiers, m)
+		case rulemodifiers.QueryModifier:
+			er.QueryModifiers = append(er.QueryModifiers, m)
+		default:
 			panic(fmt.Sprintf("got unknown modifier type %T for modifier %s", modifier, m))
 		}
 

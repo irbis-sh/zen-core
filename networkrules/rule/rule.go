@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/ZenPrivacy/zen-core/networkrules/rulemodifiers"
@@ -18,18 +19,19 @@ type Rule struct {
 	// FilterName is the name of the filter that the rule belongs to.
 	FilterName *string
 
-	MatchingModifiers  matchingModifiers
-	ModifyingModifiers []rulemodifiers.ModifyingModifier
+	MatchingModifiers matchingModifiers
+	ReqResModifiers   []rulemodifiers.ReqResModifier
+	QueryModifiers    []rulemodifiers.QueryModifier
 
 	// Document shows if rule has Document modifier.
 	Document bool
 }
 
 type matchingModifiers struct {
-	// AndModifiers should be matched together.
-	AndModifiers []rulemodifiers.MatchingModifier
-	// OrModifiers should be matched if one of them is matched.
-	OrModifiers []rulemodifiers.MatchingModifier
+	// And are modifiers that must all match for the rule to apply.
+	And []rulemodifiers.MatchingModifier
+	// Or are modifiers where at least one must match for the rule to apply.
+	Or []rulemodifiers.MatchingModifier
 }
 
 func (rm *Rule) ParseModifiers(modifiers []string) error {
@@ -94,15 +96,18 @@ func (rm *Rule) ParseModifiers(modifiers []string) error {
 			return err
 		}
 
-		if matchingModifier, ok := modifier.(rulemodifiers.MatchingModifier); ok {
+		switch m := modifier.(type) {
+		case rulemodifiers.MatchingModifier:
 			if isOr {
-				rm.MatchingModifiers.OrModifiers = append(rm.MatchingModifiers.OrModifiers, matchingModifier)
+				rm.MatchingModifiers.Or = append(rm.MatchingModifiers.Or, m)
 			} else {
-				rm.MatchingModifiers.AndModifiers = append(rm.MatchingModifiers.AndModifiers, matchingModifier)
+				rm.MatchingModifiers.And = append(rm.MatchingModifiers.And, m)
 			}
-		} else if modifyingModifier, ok := modifier.(rulemodifiers.ModifyingModifier); ok {
-			rm.ModifyingModifiers = append(rm.ModifyingModifiers, modifyingModifier)
-		} else {
+		case rulemodifiers.ReqResModifier:
+			rm.ReqResModifiers = append(rm.ReqResModifiers, m)
+		case rulemodifiers.QueryModifier:
+			rm.QueryModifiers = append(rm.QueryModifiers, m)
+		default:
 			log.Fatalf("got unknown modifier type %T for modifier %s", modifier, m)
 		}
 	}
@@ -117,15 +122,15 @@ func (rm *Rule) ShouldMatchReq(req *http.Request) bool {
 	}
 
 	// AndModifiers: All must match.
-	for _, m := range rm.MatchingModifiers.AndModifiers {
+	for _, m := range rm.MatchingModifiers.And {
 		if !m.ShouldMatchReq(req) {
 			return false
 		}
 	}
 
 	// OrModifiers: At least one must match.
-	if len(rm.MatchingModifiers.OrModifiers) > 0 {
-		for _, m := range rm.MatchingModifiers.OrModifiers {
+	if len(rm.MatchingModifiers.Or) > 0 {
+		for _, m := range rm.MatchingModifiers.Or {
 			if m.ShouldMatchReq(req) {
 				return true
 			}
@@ -139,14 +144,14 @@ func (rm *Rule) ShouldMatchReq(req *http.Request) bool {
 // ShouldMatchRes returns true if the rule should match the response.
 func (rm *Rule) ShouldMatchRes(res *http.Response) bool {
 	// maybe add sec-fetch logic too
-	for _, m := range rm.MatchingModifiers.AndModifiers {
+	for _, m := range rm.MatchingModifiers.And {
 		if !m.ShouldMatchRes(res) {
 			return false
 		}
 	}
 
-	if len(rm.MatchingModifiers.OrModifiers) > 0 {
-		for _, m := range rm.MatchingModifiers.OrModifiers {
+	if len(rm.MatchingModifiers.Or) > 0 {
+		for _, m := range rm.MatchingModifiers.Or {
 			if m.ShouldMatchRes(res) {
 				return true
 			}
@@ -159,13 +164,24 @@ func (rm *Rule) ShouldMatchRes(res *http.Response) bool {
 
 // ShouldBlockReq returns true if the request should be blocked.
 func (rm *Rule) ShouldBlockReq(*http.Request) bool {
-	return len(rm.ModifyingModifiers) == 0
+	return len(rm.ReqResModifiers) == 0 && len(rm.QueryModifiers) == 0
 }
 
 // ModifyReq modifies a request. Returns true if the request was modified.
 func (rm *Rule) ModifyReq(req *http.Request) (modified bool) {
-	for _, modifier := range rm.ModifyingModifiers {
+	for _, modifier := range rm.ReqResModifiers {
 		if modifier.ModifyReq(req) {
+			modified = true
+		}
+	}
+
+	return modified
+}
+
+// ModifyReqQuery modifies a request query. Returns true if the query was modified.
+func (rm *Rule) ModifyReqQuery(query url.Values) (modified bool) {
+	for _, qm := range rm.QueryModifiers {
+		if qm.ModifyQuery(query) {
 			modified = true
 		}
 	}
@@ -175,7 +191,7 @@ func (rm *Rule) ModifyReq(req *http.Request) (modified bool) {
 
 // ModifyRes modifies a response. Returns true if the response was modified.
 func (rm *Rule) ModifyRes(res *http.Response) (modified bool, err error) {
-	for _, modifier := range rm.ModifyingModifiers {
+	for _, modifier := range rm.ReqResModifiers {
 		m, err := modifier.ModifyRes(res)
 		if err != nil {
 			return false, fmt.Errorf("modify response: %w", err)

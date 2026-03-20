@@ -3,12 +3,12 @@ package rulemodifiers
 import (
 	"errors"
 	"fmt"
-	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 )
 
-type removeparamKind int8
+type removeparamKind int
 
 const (
 	removeparamKindGeneric removeparamKind = iota
@@ -24,7 +24,7 @@ type RemoveParamModifier struct {
 	regexp *regexp.Regexp
 }
 
-var _ ModifyingModifier = (*RemoveParamModifier)(nil)
+var _ QueryModifier = (*RemoveParamModifier)(nil)
 
 func (rm *RemoveParamModifier) Parse(modifier string) error {
 	if modifier == "removeparam" {
@@ -68,9 +68,12 @@ func (rm *RemoveParamModifier) Parse(modifier string) error {
 	return nil
 }
 
-func (rm *RemoveParamModifier) ModifyReq(req *http.Request) (modified bool) {
-	query := req.URL.Query()
+func (rm *RemoveParamModifier) ModifyQuery(query url.Values) bool {
+	if len(query) == 0 {
+		return false
+	}
 
+	var modified bool
 	switch rm.kind {
 	case removeparamKindGeneric:
 		for param := range query {
@@ -119,15 +122,7 @@ func (rm *RemoveParamModifier) ModifyReq(req *http.Request) (modified bool) {
 		}
 	}
 
-	if modified {
-		req.URL.RawQuery = query.Encode()
-	}
 	return modified
-}
-
-// ModifyRes implements [ModifyingModifier].
-func (rm *RemoveParamModifier) ModifyRes(*http.Response) (modified bool, err error) {
-	return false, nil
 }
 
 func (rm *RemoveParamModifier) Cancels(modifier Modifier) bool {

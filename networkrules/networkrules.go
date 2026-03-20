@@ -110,9 +110,9 @@ func (nr *NetworkRules) ParseRule(rawRule string, filterName *string) (isExcepti
 }
 
 func (nr *NetworkRules) ModifyReq(req *http.Request) (appliedRules []rule.Rule, shouldBlock bool, redirectURL string) {
-	url := renderURLWithoutPort(req.URL)
+	reqURL := renderURLWithoutPort(req.URL)
 
-	primaryRules := nr.primaryStore.Get(url)
+	primaryRules := nr.primaryStore.Get(reqURL)
 	primaryRules = filter(primaryRules, func(r *rule.Rule) bool {
 		return r.ShouldMatchReq(req)
 	})
@@ -120,12 +120,18 @@ func (nr *NetworkRules) ModifyReq(req *http.Request) (appliedRules []rule.Rule, 
 		return nil, false, ""
 	}
 
-	exceptions := nr.exceptionStore.Get(url)
+	exceptions := nr.exceptionStore.Get(reqURL)
 	exceptions = filter(exceptions, func(er *exceptionrule.ExceptionRule) bool {
 		return er.ShouldMatchReq(req)
 	})
 
 	initialURL := req.URL.String()
+
+	var query url.Values
+	if req.URL.RawQuery != "" {
+		query = req.URL.Query()
+	}
+
 outer:
 	for _, r := range primaryRules {
 		for _, ex := range exceptions {
@@ -136,9 +142,19 @@ outer:
 		if r.ShouldBlockReq(req) {
 			return []rule.Rule{*r}, true, ""
 		}
-		if r.ModifyReq(req) {
+
+		modified := r.ModifyReq(req)
+		if query != nil {
+			modified = r.ModifyReqQuery(query) || modified
+		}
+
+		if modified {
 			appliedRules = append(appliedRules, *r)
 		}
+	}
+
+	if len(appliedRules) > 0 && query != nil {
+		req.URL.RawQuery = query.Encode()
 	}
 
 	finalURL := req.URL.String()

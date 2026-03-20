@@ -1,7 +1,7 @@
 package rulemodifiers
 
 import (
-	"net/http"
+	"net/url"
 	"regexp"
 	"testing"
 )
@@ -98,17 +98,23 @@ func TestRemoveParamModifier(t *testing.T) {
 			t.Run(tt.name, func(t *testing.T) {
 				t.Parallel()
 
-				req, err := http.NewRequest("GET", tt.url, nil)
+				u, err := url.Parse(tt.url)
 				if err != nil {
-					t.Fatalf("Failed to create request: %v", err)
+					t.Fatalf("parse URL %q: %v", tt.url, err)
 				}
 
-				modified := tt.modifier.ModifyReq(req)
+				q := u.Query()
+
+				modified := tt.modifier.ModifyQuery(q)
 				if modified != tt.modified {
 					t.Errorf("ModifyReq() modified = %v, want %v", modified, tt.modified)
 				}
 
-				got := req.URL.String()
+				if modified {
+					u.RawQuery = q.Encode()
+				}
+
+				got := u.String()
 				if got != tt.want {
 					t.Errorf("ModifyReq() got URL = %v, want %v", got, tt.want)
 				}
