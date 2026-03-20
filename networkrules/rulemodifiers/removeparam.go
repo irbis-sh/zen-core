@@ -76,9 +76,7 @@ func (rm *RemoveParamModifier) ModifyQuery(query url.Values) bool {
 	var modified bool
 	switch rm.kind {
 	case removeparamKindGeneric:
-		for param := range query {
-			query.Del(param)
-		}
+		clear(query)
 		modified = true
 	case removeparamKindRegexp:
 		for param, values := range query {
