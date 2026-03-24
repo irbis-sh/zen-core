@@ -21,7 +21,7 @@ func FindProcessPath(port uint16) (string, error) {
 		// dwLocalPort stores the port in network byte order (big-endian)
 		// in the lower 16 bits; swap bytes to get host order.
 		p := uint16(r.dwLocalPort)
-		localPort := p<<8 | p>>8
+		localPort := syscall.Ntohs(p)
 		if localPort != port {
 			continue
 		}
