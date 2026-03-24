@@ -11,7 +11,7 @@ require (
 	github.com/spyzhov/ajson v0.9.6
 	github.com/tdewolff/parse/v2 v2.8.4
 	golang.org/x/net v0.46.0
-	golang.org/x/sys v0.37.0
+	golang.org/x/sys v0.42.0
 	howett.net/plist v1.0.1
 )
 
