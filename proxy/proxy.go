@@ -141,7 +141,9 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("portnum parse: %v", err)
 	}
 
+	start := time.Now()
 	proc, err := process.FindBySourcePort(uint16(portNum))
+	log.Printf("FindBySourcePort took %v", time.Since(start))
 	if err != nil {
 		log.Printf("procpath(%d): %v", portNum, err)
 	} else {
