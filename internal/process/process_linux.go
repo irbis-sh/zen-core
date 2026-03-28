@@ -133,10 +133,9 @@ func findPid(inode uint64) (uint32, error) {
 }
 
 // procName determines the best display name for a process.
-// It reads /proc/<pid>/comm and compares it character-by-character
-// against the basename of the exe path. If they diverge (comm was
-// set via prctl(PR_SET_NAME)), comm wins. Otherwise the exe basename
-// is used since comm may be truncated to 16 characters.
+// It reads /proc/<pid>/comm and compares it against the basename of the exe path.
+// If they diverge (comm was set via prctl(PR_SET_NAME)), comm wins.
+// Otherwise the exe basename is used since comm may be truncated to 16 characters.
 func procName(pid uint32, exePath string) string {
 	comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
 	if err != nil {
