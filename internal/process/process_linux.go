@@ -145,13 +145,13 @@ func procName(pid uint32, exePath string) string {
 	commStr := strings.TrimRight(string(comm), "\n")
 	base := filepath.Base(exePath)
 
-	// Compare character by character up to the length of comm.
-	// If they differ, comm reflects a custom name (prctl) - use it.
-	// If they match and exe basename is longer, comm is truncated - use basename.
-	for i := 0; i < len(commStr); i++ {
-		if i >= len(base) || commStr[i] != base[i] {
-			return commStr
-		}
+	// If comm diverges from base, it reflects a
+	// custom name set via prctl(PR_SET_NAME) - use it.
+	// Otherwise use base.
+	commLen := len(commStr)
+	baseLen := len(base)
+	if commLen > baseLen || commStr != base[:commLen] {
+		return commStr
 	}
 	return base
 }
