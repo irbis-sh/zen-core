@@ -12,12 +12,10 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/ZenPrivacy/zen-core/internal/process"
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
@@ -135,21 +133,6 @@ func (p *Proxy) shutdownServer() error {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	_, port, _ := net.SplitHostPort(r.RemoteAddr)
-	portNum, err := strconv.ParseUint(port, 10, 16)
-	if err != nil {
-		log.Printf("portnum parse: %v", err)
-	}
-
-	start := time.Now()
-	proc, err := process.FindBySourcePort(uint16(portNum))
-	log.Printf("FindBySourcePort took %v", time.Since(start))
-	if err != nil {
-		log.Printf("procpath(%d): %v", portNum, err)
-	} else {
-		log.Printf("%d: PID %d, name %s, path %s", portNum, proc.ID, proc.Name, proc.DiskPath)
-	}
-
 	if r.Method == http.MethodConnect {
 		p.proxyConnect(w, r)
 	} else {
