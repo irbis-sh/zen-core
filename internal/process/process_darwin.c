@@ -60,9 +60,9 @@ static int list_pids(pid_t **pids, size_t *count) {
 	return 0;
 }
 
-// find_process_path_by_port looks up the process owning the given TCP source port.
-// Returns: 0 = success (path written to buf), 1 = not found, negative = -errno.
-int find_process_path_by_port(uint16_t port, char *buf, size_t buflen) {
+// find_pid_by_port looks up the PID owning the given TCP source port.
+// Returns: 0 = success (PID written to *out_pid), 1 = not found, negative = -errno.
+int find_pid_by_port(uint16_t port, pid_t *out_pid) {
 	pid_t *pids = NULL;
 	size_t pid_count;
 	int err = list_pids(&pids, &pid_count);
@@ -117,11 +117,10 @@ int find_process_path_by_port(uint16_t port, char *buf, size_t buflen) {
 			uint16_t lport = ntohs(si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_lport);
 			if (lport != port) continue;
 
-			// Match found. Resolve the process path.
-			int ret = proc_pidpath(pid, buf, (uint32_t)buflen);
+			// Match found.
+			*out_pid = pid;
 			free(fds);
 			free(pids);
-			if (ret <= 0) return -errno;
 			return 0;
 		}
 		free(fds);
@@ -129,4 +128,20 @@ int find_process_path_by_port(uint16_t port, char *buf, size_t buflen) {
 
 	free(pids);
 	return 1; // not found
+}
+
+// find_process_path_by_pid resolves the filesystem path for a PID.
+// Returns: 0 = success, negative = -errno.
+int find_process_path_by_pid(pid_t pid, char *buf, size_t buflen) {
+	int ret = proc_pidpath(pid, buf, (uint32_t)buflen);
+	if (ret <= 0) return -errno;
+	return 0;
+}
+
+// find_process_name_by_pid resolves the process name for a PID.
+// Returns: 0 = success, negative = -errno.
+int find_process_name_by_pid(pid_t pid, char *buf, size_t buflen) {
+	int ret = proc_name(pid, buf, (uint32_t)buflen);
+	if (ret <= 0) return -errno;
+	return 0;
 }

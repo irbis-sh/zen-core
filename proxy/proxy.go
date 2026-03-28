@@ -17,7 +17,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZenPrivacy/zen-core/internal/proc"
+	"github.com/ZenPrivacy/zen-core/internal/process"
 	"github.com/ZenPrivacy/zen-core/internal/redacted"
 )
 
@@ -141,11 +141,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Printf("portnum parse: %v", err)
 	}
 
-	procPath, err := proc.FindProcessPath(uint16(portNum))
+	proc, err := process.FindBySourcePort(uint16(portNum))
 	if err != nil {
 		log.Printf("procpath(%d): %v", portNum, err)
 	} else {
-		log.Printf("%d: %s", portNum, procPath)
+		log.Printf("%d: PID %d, name %s, path %s", portNum, proc.ID, proc.Name, proc.DiskPath)
 	}
 
 	if r.Method == http.MethodConnect {

@@ -1,4 +1,4 @@
-package proc
+package process
 
 import (
 	"unsafe"
@@ -11,6 +11,9 @@ import (
 //sys getExtendedTcpTable(pTcpTable *byte, pdwSize *uint32, bOrder bool, ulAf uint32, tableClass uint32, reserved uint32) (ret uint32, err error) = iphlpapi.GetExtendedTcpTable
 //sys queryFullProcessImageName(process handle, flags uint32, buffer *uint16, bufferSize *uint32) (err error) = kernel32.QueryFullProcessImageNameW
 //sys openProcess(desiredAccess uint32, inheritHandle bool, processId uint32) (process handle, err error) = kernel32.OpenProcess
+//sys getFileVersionInfoSize(filename *uint16, handle *uint32) (size uint32, err error) = version.GetFileVersionInfoSizeW
+//sys getFileVersionInfo(filename *uint16, handle uint32, len uint32, data *byte) (err error) = version.GetFileVersionInfoW
+//sys verQueryValue(block *byte, subBlock *uint16, buffer *uintptr, len *uint32) (err error) = version.VerQueryValueW
 
 // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid
 type mibTcpRowOwnerPid struct {
@@ -20,6 +23,12 @@ type mibTcpRowOwnerPid struct {
 type mibTcpTableOwnerPid struct {
 	DwNumEntries uint32
 	Table        [1]mibTcpRowOwnerPid
+}
+
+// https://learn.microsoft.com/en-us/windows/win32/api/verrsrc/ns-verrsrc-vs_fixedfileinfo
+type langAndCodePage struct {
+	wLanguage uint16
+	wCodePage uint16
 }
 
 type handle = windows.Handle

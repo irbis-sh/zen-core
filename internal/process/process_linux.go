@@ -1,4 +1,4 @@
-package proc
+package process
 
 import (
 	"bufio"
@@ -10,25 +10,28 @@ import (
 	"strings"
 )
 
-// FindProcessPath returns the filesystem path of the process that owns
-// the given TCP source port, or ErrNotFound if no process owns it.
-func FindProcessPath(port uint16) (string, error) {
+// FindBySourcePort returns the process that owns the given TCP source port,
+// or ErrNotFound if no process owns it.
+func FindBySourcePort(port uint16) (Process, error) {
 	inode, err := findInode(port)
 	if err != nil {
-		return "", fmt.Errorf("find inode: %v", err)
+		return Process{}, fmt.Errorf("find inode: %v", err)
 	}
 
 	pid, err := findPid(inode)
 	if err != nil {
-		return "", fmt.Errorf("find pid: %v", err)
+		return Process{}, fmt.Errorf("find pid: %v", err)
 	}
 
 	path, err := findProcPath(pid)
 	if err != nil {
-		return "", fmt.Errorf("find proc path: %v", err)
+		return Process{}, fmt.Errorf("find proc path: %v", err)
 	}
 
-	return path, nil
+	return Process{
+		ID:       int(pid),
+		DiskPath: path,
+	}, nil
 }
 
 // findInode finds the inode corresponding to a file descriptor
