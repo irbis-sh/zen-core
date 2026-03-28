@@ -7,7 +7,7 @@ package process
 #include <libproc.h>
 #include <sys/types.h>
 
-// Defined in proc_darwin.c
+// Defined in process_darwin.c
 int find_pid_by_port(uint16_t port, pid_t *out_pid);
 int find_process_path_by_pid(pid_t pid, char *buf, size_t buflen);
 int find_process_name_by_pid(pid_t pid, char *buf, size_t buflen);
