@@ -9,9 +9,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// FindProcess returns the process that owns the given TCP source port,
+// FindBySourcePort returns the process that owns the given TCP source port,
 // or ErrNotFound if no process owns it.
-func FindProcessBySourcePort(port uint16) (Process, error) {
+func FindBySourcePort(port uint16) (Process, error) {
 	tcpTable, err := getTCPTable()
 	if err != nil {
 		return Process{}, fmt.Errorf("get tcp table: %v", err)
