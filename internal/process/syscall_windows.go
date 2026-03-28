@@ -25,7 +25,7 @@ type mibTcpTableOwnerPid struct {
 	Table        [1]mibTcpRowOwnerPid
 }
 
-// https://learn.microsoft.com/en-us/windows/win32/api/verrsrc/ns-verrsrc-vs_fixedfileinfo
+// https://learn.microsoft.com/en-us/windows/win32/api/winver/nf-winver-verqueryvaluew#varfileinfotranslation
 type langAndCodePage struct {
 	wLanguage uint16
 	wCodePage uint16

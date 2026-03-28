@@ -12,32 +12,39 @@ import (
 // FindBySourcePort returns the process that owns the given TCP source port,
 // or ErrNotFound if no process owns it.
 func FindBySourcePort(port uint16) (Process, error) {
+	pid, err := findPidByPort(port)
+	if err != nil {
+		return Process{}, err
+	}
+
+	path, err := getProcPath(pid)
+	if err != nil {
+		return Process{}, fmt.Errorf("get process path by pid %d: %v", pid, err)
+	}
+
+	name, _ := getFileDescription(path)
+	return Process{
+		ID:       int(pid),
+		Name:     name,
+		DiskPath: path,
+	}, nil
+}
+
+func findPidByPort(port uint16) (uint32, error) {
 	tcpTable, err := getTCPTable()
 	if err != nil {
-		return Process{}, fmt.Errorf("get tcp table: %v", err)
+		return 0, fmt.Errorf("get tcp table: %v", err)
 	}
+
+	// Pre-convert to network byte order.
+	netPort := port<<8 | port>>8
 
 	for _, r := range tcpTable {
-		// dwLocalPort stores the port in network byte order (big-endian)
-		// in the lower 16 bits; swap bytes to get host order.
-		p := uint16(r.dwLocalPort)
-		localPort := syscall.Ntohs(p)
-		if localPort != port {
-			continue
+		if uint16(r.dwLocalPort) == netPort {
+			return r.dwOwningPid, nil
 		}
-
-		path, err := getProcPath(r.dwOwningPid)
-		if err != nil {
-			return Process{}, fmt.Errorf("get process path by pid %d: %v", r.dwOwningPid, err)
-		}
-		name, _ := getFileDescription(path)
-		return Process{
-			ID:       int(r.dwOwningPid),
-			Name:     name,
-			DiskPath: path,
-		}, nil
 	}
-	return Process{}, ErrNotFound
+	return 0, ErrNotFound
 }
 
 func getTCPTable() ([]mibTcpRowOwnerPid, error) {
@@ -62,9 +69,7 @@ func getTCPTable() ([]mibTcpRowOwnerPid, error) {
 	}
 }
 
-// getFileDescription returns the FileDescription from the executable's
-// version info resource. This is the friendly name shown in Task Manager
-// (e.g. "Firefox" for firefox.exe).
+// getFileDescription returns the FileDescription from the executable's version info resource.
 func getFileDescription(path string) (string, error) {
 	pathUTF16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
