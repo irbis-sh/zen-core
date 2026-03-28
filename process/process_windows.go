@@ -132,6 +132,25 @@ func getProcPath(pid uint32) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return windows.UTF16ToString(b[:bufSize]), nil
+		path := windows.UTF16ToString(b[:bufSize])
+		return longPathName(path)
 	}
+}
+
+// longPathName resolves 8.3 short names to their long form.
+func longPathName(path string) (string, error) {
+	pathUTF16, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return path, nil
+	}
+	n, _ := getLongPathName(pathUTF16, nil, 0)
+	if n == 0 {
+		return path, nil
+	}
+	buf := make([]uint16, n)
+	n, err = getLongPathName(pathUTF16, &buf[0], uint32(len(buf)))
+	if err != nil {
+		return path, nil
+	}
+	return windows.UTF16ToString(buf[:n]), nil
 }

@@ -43,6 +43,7 @@ var (
 	modversion  = windows.NewLazySystemDLL("version.dll")
 
 	procGetExtendedTcpTable        = modiphlpapi.NewProc("GetExtendedTcpTable")
+	procGetLongPathNameW           = modkernel32.NewProc("GetLongPathNameW")
 	procOpenProcess                = modkernel32.NewProc("OpenProcess")
 	procQueryFullProcessImageNameW = modkernel32.NewProc("QueryFullProcessImageNameW")
 	procGetFileVersionInfoSizeW    = modversion.NewProc("GetFileVersionInfoSizeW")
@@ -58,6 +59,15 @@ func getExtendedTcpTable(pTcpTable *byte, pdwSize *uint32, bOrder bool, ulAf uin
 	r0, _, e1 := syscall.SyscallN(procGetExtendedTcpTable.Addr(), uintptr(unsafe.Pointer(pTcpTable)), uintptr(unsafe.Pointer(pdwSize)), uintptr(_p0), uintptr(ulAf), uintptr(tableClass), uintptr(reserved))
 	ret = uint32(r0)
 	if ret == 0 {
+		err = errnoErr(e1)
+	}
+	return
+}
+
+func getLongPathName(shortPath *uint16, longPath *uint16, longPathSize uint32) (requiredSize uint32, err error) {
+	r0, _, e1 := syscall.SyscallN(procGetLongPathNameW.Addr(), uintptr(unsafe.Pointer(shortPath)), uintptr(unsafe.Pointer(longPath)), uintptr(longPathSize))
+	requiredSize = uint32(r0)
+	if requiredSize == 0 {
 		err = errnoErr(e1)
 	}
 	return

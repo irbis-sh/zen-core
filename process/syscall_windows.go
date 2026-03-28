@@ -13,6 +13,7 @@ import (
 //sys openProcess(desiredAccess uint32, inheritHandle bool, processId uint32) (process handle, err error) = kernel32.OpenProcess
 //sys getFileVersionInfoSize(filename *uint16, handle *uint32) (size uint32, err error) = version.GetFileVersionInfoSizeW
 //sys getFileVersionInfo(filename *uint16, handle uint32, len uint32, data *byte) (err error) = version.GetFileVersionInfoW
+//sys getLongPathName(shortPath *uint16, longPath *uint16, longPathSize uint32) (requiredSize uint32, err error) = kernel32.GetLongPathNameW
 //sys verQueryValue(block *byte, subBlock *uint16, buffer *unsafe.Pointer, len *uint32) (err error) = version.VerQueryValueW
 
 // https://learn.microsoft.com/en-us/windows/win32/api/tcpmib/ns-tcpmib-mib_tcprow_owner_pid
