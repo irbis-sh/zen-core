@@ -28,11 +28,7 @@ func FindBySourcePort(port uint16) (Process, error) {
 		return Process{}, fmt.Errorf("find proc path: %v", err)
 	}
 
-	// An alternative approach would be to read /proc/pid/comm, but it's truncated
-	// to 16 characters (which a lot of GUI programs exceed).
-	// The downside with basenaming /proc/pid/exe is that it doesn't reflect prctl(PR_SET_NAME),
-	// but I feel like it's an okay tradeoff to make.
-	name := filepath.Base(path)
+	name := procName(pid, path)
 
 	return Process{
 		ID:       int(pid),
@@ -134,6 +130,30 @@ func findPid(inode uint64) (uint32, error) {
 		}
 	}
 	return 0, ErrNotFound
+}
+
+// procName determines the best display name for a process.
+// It reads /proc/<pid>/comm and compares it character-by-character
+// against the basename of the exe path. If they diverge (comm was
+// set via prctl(PR_SET_NAME)), comm wins. Otherwise the exe basename
+// is used since comm may be truncated to 16 characters.
+func procName(pid uint32, exePath string) string {
+	comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid))
+	if err != nil {
+		return filepath.Base(exePath)
+	}
+	commStr := strings.TrimRight(string(comm), "\n")
+	base := filepath.Base(exePath)
+
+	// Compare character by character up to the length of comm.
+	// If they differ, comm reflects a custom name (prctl) - use it.
+	// If they match and exe basename is longer, comm is truncated - use basename.
+	for i := 0; i < len(commStr); i++ {
+		if i >= len(base) || commStr[i] != base[i] {
+			return commStr
+		}
+	}
+	return base
 }
 
 func findProcPath(pid uint32) (string, error) {
