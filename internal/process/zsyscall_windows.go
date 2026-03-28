@@ -101,7 +101,7 @@ func getFileVersionInfo(filename *uint16, handle uint32, len uint32, data *byte)
 	return
 }
 
-func verQueryValue(block *byte, subBlock *uint16, buffer *uintptr, len *uint32) (err error) {
+func verQueryValue(block *byte, subBlock *uint16, buffer *unsafe.Pointer, len *uint32) (err error) {
 	r1, _, e1 := syscall.SyscallN(procVerQueryValueW.Addr(), uintptr(unsafe.Pointer(block)), uintptr(unsafe.Pointer(subBlock)), uintptr(unsafe.Pointer(buffer)), uintptr(unsafe.Pointer(len)))
 	if r1 == 0 {
 		err = errnoErr(e1)

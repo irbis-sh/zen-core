@@ -87,7 +87,7 @@ func getFileDescription(path string) (string, error) {
 	}
 
 	// Query \VarFileInfo\Translation to get the language/codepage pairs.
-	var transPtr uintptr
+	var transPtr unsafe.Pointer
 	var transLen uint32
 	transQuery, _ := windows.UTF16PtrFromString(`\VarFileInfo\Translation`)
 	if err := verQueryValue(&data[0], transQuery, &transPtr, &transLen); err != nil {
@@ -97,11 +97,11 @@ func getFileDescription(path string) (string, error) {
 		return "", fmt.Errorf("no translation entries in version info")
 	}
 
-	trans := (*langAndCodePage)(unsafe.Pointer(transPtr))
+	trans := (*langAndCodePage)(transPtr)
 	query := fmt.Sprintf(`\StringFileInfo\%04x%04x\FileDescription`, trans.wLanguage, trans.wCodePage)
 	queryUTF16, _ := windows.UTF16PtrFromString(query)
 
-	var descPtr uintptr
+	var descPtr unsafe.Pointer
 	var descLen uint32
 	if err := verQueryValue(&data[0], queryUTF16, &descPtr, &descLen); err != nil {
 		return "", fmt.Errorf("VerQueryValue(FileDescription): %w", err)
@@ -110,7 +110,7 @@ func getFileDescription(path string) (string, error) {
 		return "", nil
 	}
 
-	desc := windows.UTF16PtrToString((*uint16)(unsafe.Pointer(descPtr)))
+	desc := windows.UTF16PtrToString((*uint16)(descPtr))
 	return desc, nil
 }
 
