@@ -28,8 +28,15 @@ func FindBySourcePort(port uint16) (Process, error) {
 		return Process{}, fmt.Errorf("find proc path: %v", err)
 	}
 
+	// An alternative approach would be to read /proc/pid/comm, but it's truncated
+	// to 16 characters (which a lot of GUI programs exceed).
+	// The downside with basenaming /proc/pid/exe is that it doesn't reflect prctl(PR_SET_NAME),
+	// but I feel like it's an okay tradeoff to make.
+	name := filepath.Base(path)
+
 	return Process{
 		ID:       int(pid),
+		Name:     name,
 		DiskPath: path,
 	}, nil
 }
