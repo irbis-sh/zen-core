@@ -1,6 +1,5 @@
 //go:build darwin
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -68,34 +67,42 @@ int find_pid_by_port(uint16_t port, pid_t *out_pid) {
 	int err = list_pids(&pids, &pid_count);
 	if (err != 0) return err;
 
-	for (size_t i = 0; i < pid_count; i++) {
+	// Pre-convert to network byte order.
+	uint16_t net_port = htons(port);
+
+	// Reusable FD buffer, grown as needed across PIDs.
+	size_t fds_bufsize = sizeof(struct proc_fdinfo) * 256;
+	struct proc_fdinfo *fds = malloc(fds_bufsize);
+	if (!fds) {
+		free(pids);
+		return -ENOMEM;
+	}
+
+	for (size_t i = 0; i < pid_count; ++i) {
 		int pid = pids[i];
 		if (pid <= 0) continue;
 
-		struct proc_taskallinfo tai;
-		int nb = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &tai, sizeof(tai));
+		// Call PROC_PIDLISTFDS directly, skipping PROC_PIDTASKALLINFO.
+		// If the buffer is exactly full, it may have been too small - grow and retry.
+		int nb;
+		for (;;) {
+			nb = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, fds, (int)fds_bufsize);
+			if (nb <= 0) break;
+			if ((size_t)nb + sizeof(struct proc_fdinfo) < fds_bufsize) break;
+			fds_bufsize *= 2;
+			struct proc_fdinfo *tmp = realloc(fds, fds_bufsize);
+			if (!tmp) {
+				free(fds);
+				free(pids);
+				return -ENOMEM;
+			}
+			fds = tmp;
+		}
 		if (nb <= 0) {
 			if (errno == EPERM || errno == ESRCH) continue;
+			free(fds);
 			free(pids);
 			return -errno;
-		}
-		if ((size_t)nb < sizeof(tai)) continue;
-		if (tai.pbsd.pbi_nfiles == 0) continue;
-
-		size_t fds_bufsize = sizeof(struct proc_fdinfo) * tai.pbsd.pbi_nfiles;
-		struct proc_fdinfo *fds = malloc(fds_bufsize);
-		if (!fds) {
-			free(pids);
-			return -ENOMEM;
-		}
-
-		nb = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, fds, (int)fds_bufsize);
-		if (nb <= 0) {
-			int e = errno;
-			free(fds);
-			if (e == ESRCH || e == EPERM) continue;
-			free(pids);
-			return -e;
 		}
 
 		int nf = nb / sizeof(struct proc_fdinfo);
@@ -113,9 +120,7 @@ int find_pid_by_port(uint16_t port, pid_t *out_pid) {
 			if ((size_t)nb < sizeof(si)) continue;
 
 			if (si.psi.soi_kind != SOCKINFO_TCP) continue;
-
-			uint16_t lport = ntohs(si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_lport);
-			if (lport != port) continue;
+			if (si.psi.soi_proto.pri_tcp.tcpsi_ini.insi_lport != net_port) continue;
 
 			// Match found.
 			*out_pid = pid;
@@ -123,9 +128,9 @@ int find_pid_by_port(uint16_t port, pid_t *out_pid) {
 			free(pids);
 			return 0;
 		}
-		free(fds);
 	}
 
+	free(fds);
 	free(pids);
 	return 1; // not found
 }
