@@ -36,7 +36,7 @@ func TestFindBySourcePort(t *testing.T) {
 
 	port := conn.LocalAddr().(*net.TCPAddr).Port
 
-	proc, err := process.FindBySourcePort(uint16(port))
+	proc, err := process.FindBySourcePort(uint16(port)) // #nosec G115 -- port will fit in uint16
 	if err != nil {
 		t.Fatalf("FindBySourcePort(%d): %v", port, err)
 	}
