@@ -1,5 +1,3 @@
-// process resolves the filesystem path of the process that owns
-// a given TCP port.
 package process
 
 import "errors"
