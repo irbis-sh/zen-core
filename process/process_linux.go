@@ -15,17 +15,17 @@ import (
 func FindBySourcePort(port uint16) (Process, error) {
 	inode, err := findInode(port)
 	if err != nil {
-		return Process{}, fmt.Errorf("find inode: %v", err)
+		return Process{}, fmt.Errorf("find inode: %w", err)
 	}
 
 	pid, err := findPid(inode)
 	if err != nil {
-		return Process{}, fmt.Errorf("find pid: %v", err)
+		return Process{}, fmt.Errorf("find pid: %w", err)
 	}
 
 	path, err := findProcPath(pid)
 	if err != nil {
-		return Process{}, fmt.Errorf("find proc path: %v", err)
+		return Process{}, fmt.Errorf("find proc path: %w", err)
 	}
 
 	name := procName(pid, path)
