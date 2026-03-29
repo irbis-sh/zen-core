@@ -1,6 +1,7 @@
 package process_test
 
 import (
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -64,7 +65,7 @@ func TestFindBySourcePort(t *testing.T) {
 	t.Run("returns ErrNotFound for unbound port", func(t *testing.T) {
 		t.Parallel()
 
-		if _, err := process.FindBySourcePort(0); err != process.ErrNotFound {
+		if _, err := process.FindBySourcePort(0); !errors.Is(err, process.ErrNotFound) {
 			t.Errorf("err = %v, want %v", err, process.ErrNotFound)
 		}
 	})
