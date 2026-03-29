@@ -12,48 +12,60 @@ import (
 func TestFindBySourcePort(t *testing.T) {
 	t.Parallel()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer ln.Close()
+	t.Run("finds owning process for active connection", func(t *testing.T) {
+		t.Parallel()
 
-	serverConn := make(chan net.Conn, 1)
-	go func() {
-		c, _ := ln.Accept()
-		serverConn <- c
-	}()
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer ln.Close()
 
-	conn, err := net.Dial("tcp", ln.Addr().String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer conn.Close()
+		serverConn := make(chan net.Conn, 1)
+		go func() {
+			c, _ := ln.Accept()
+			serverConn <- c
+		}()
 
-	if sc := <-serverConn; sc != nil {
-		defer sc.Close()
-	}
+		conn, err := net.Dial("tcp", ln.Addr().String())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
 
-	port := conn.LocalAddr().(*net.TCPAddr).Port
+		if sc := <-serverConn; sc != nil {
+			defer sc.Close()
+		}
 
-	proc, err := process.FindBySourcePort(uint16(port)) // #nosec G115 -- port will fit in uint16
-	if err != nil {
-		t.Fatalf("FindBySourcePort(%d): %v", port, err)
-	}
+		port := conn.LocalAddr().(*net.TCPAddr).Port
 
-	if proc.ID != os.Getpid() {
-		t.Errorf("PID = %d, want %d", proc.ID, os.Getpid())
-	}
+		proc, err := process.FindBySourcePort(uint16(port)) // #nosec G115 -- port will fit in uint16
+		if err != nil {
+			t.Fatalf("FindBySourcePort(%d): %v", port, err)
+		}
 
-	exe, err := os.Executable()
-	if err != nil {
-		t.Fatalf("os.Executable: %v", err)
-	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		t.Fatalf("EvalSymlinks: %v", err)
-	}
-	if proc.DiskPath != exe {
-		t.Errorf("DiskPath = %q, want %q", proc.DiskPath, exe)
-	}
+		if proc.ID != os.Getpid() {
+			t.Errorf("PID = %d, want %d", proc.ID, os.Getpid())
+		}
+
+		exe, err := os.Executable()
+		if err != nil {
+			t.Fatalf("os.Executable: %v", err)
+		}
+		exe, err = filepath.EvalSymlinks(exe)
+		if err != nil {
+			t.Fatalf("EvalSymlinks: %v", err)
+		}
+		if proc.DiskPath != exe {
+			t.Errorf("DiskPath = %q, want %q", proc.DiskPath, exe)
+		}
+	})
+
+	t.Run("returns ErrNotFound for unbound port", func(t *testing.T) {
+		t.Parallel()
+
+		if _, err := process.FindBySourcePort(0); err != process.ErrNotFound {
+			t.Errorf("err = %v, want %v", err, process.ErrNotFound)
+		}
+	})
 }
