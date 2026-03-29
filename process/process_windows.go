@@ -40,7 +40,7 @@ func findPidByPort(port uint16) (uint32, error) {
 	netPort := port<<8 | port>>8
 
 	for _, r := range tcpTable {
-		if uint16(r.dwLocalPort) == netPort {
+		if uint16(r.dwLocalPort) == netPort { // #nosec G115 -- port numbers always fit in uint16
 			return r.dwOwningPid, nil
 		}
 	}
@@ -133,24 +133,24 @@ func getProcPath(pid uint32) (string, error) {
 			return "", err
 		}
 		path := windows.UTF16ToString(b[:bufSize])
-		return longPathName(path)
+		return longPathName(path), nil
 	}
 }
 
 // longPathName resolves 8.3 short names to their long form.
-func longPathName(path string) (string, error) {
+func longPathName(path string) string {
 	pathUTF16, err := windows.UTF16PtrFromString(path)
 	if err != nil {
-		return path, nil
+		return path
 	}
 	n, _ := getLongPathName(pathUTF16, nil, 0)
 	if n == 0 {
-		return path, nil
+		return path
 	}
 	buf := make([]uint16, n)
-	n, err = getLongPathName(pathUTF16, &buf[0], uint32(len(buf)))
+	n, err = getLongPathName(pathUTF16, &buf[0], n)
 	if err != nil {
-		return path, nil
+		return path
 	}
-	return windows.UTF16ToString(buf[:n]), nil
+	return windows.UTF16ToString(buf[:n])
 }
