@@ -51,16 +51,13 @@ var (
 	procVerQueryValueW             = modversion.NewProc("VerQueryValueW")
 )
 
-func getExtendedTcpTable(pTcpTable *byte, pdwSize *uint32, bOrder bool, ulAf uint32, tableClass uint32, reserved uint32) (ret uint32, err error) {
+func getExtendedTcpTable(pTcpTable *byte, pdwSize *uint32, bOrder bool, ulAf uint32, tableClass uint32, reserved uint32) (ret uint32) {
 	var _p0 uint32
 	if bOrder {
 		_p0 = 1
 	}
-	r0, _, e1 := syscall.SyscallN(procGetExtendedTcpTable.Addr(), uintptr(unsafe.Pointer(pTcpTable)), uintptr(unsafe.Pointer(pdwSize)), uintptr(_p0), uintptr(ulAf), uintptr(tableClass), uintptr(reserved))
+	r0, _, _ := syscall.SyscallN(procGetExtendedTcpTable.Addr(), uintptr(unsafe.Pointer(pTcpTable)), uintptr(unsafe.Pointer(pdwSize)), uintptr(_p0), uintptr(ulAf), uintptr(tableClass), uintptr(reserved))
 	ret = uint32(r0)
-	if ret == 0 {
-		err = errnoErr(e1)
-	}
 	return
 }
 

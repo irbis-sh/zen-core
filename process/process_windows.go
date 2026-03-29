@@ -49,14 +49,14 @@ func findPidByPort(port uint16) (uint32, error) {
 
 func getTCPTable() ([]mibTcpRowOwnerPid, error) {
 	var bufSize uint32
-	ret, _ := getExtendedTcpTable(nil, &bufSize, false, windows.AF_INET, tcpTableOwnerPidAll, 0)
+	ret := getExtendedTcpTable(nil, &bufSize, false, windows.AF_INET, tcpTableOwnerPidAll, 0)
 	if ret != uint32(windows.ERROR_INSUFFICIENT_BUFFER) {
 		return nil, fmt.Errorf("GetExtendedTcpTable size query: %w", syscall.Errno(ret))
 	}
 
 	for {
 		table := make([]byte, bufSize)
-		ret, _ = getExtendedTcpTable(&table[0], &bufSize, false, windows.AF_INET, tcpTableOwnerPidAll, 0)
+		ret = getExtendedTcpTable(&table[0], &bufSize, false, windows.AF_INET, tcpTableOwnerPidAll, 0)
 		switch ret {
 		case 0:
 			dwNumEntries := int(*(*uint32)(unsafe.Pointer(&table[0])))
