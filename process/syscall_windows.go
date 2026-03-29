@@ -8,6 +8,7 @@ import (
 
 //go:generate go run golang.org/x/sys/windows/mkwinsyscall -output zsyscall_windows.go syscall_windows.go
 
+//nolint:gocritic
 //sys getExtendedTcpTable(pTcpTable *byte, pdwSize *uint32, bOrder bool, ulAf uint32, tableClass uint32, reserved uint32) (ret uint32, err error) = iphlpapi.GetExtendedTcpTable
 //sys queryFullProcessImageName(process handle, flags uint32, buffer *uint16, bufferSize *uint32) (err error) = kernel32.QueryFullProcessImageNameW
 //sys openProcess(desiredAccess uint32, inheritHandle bool, processId uint32) (process handle, err error) = kernel32.OpenProcess
