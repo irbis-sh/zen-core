@@ -9,7 +9,7 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// FindBySourcePort returns the process that owns the given TCP source port,
+// FindBySourcePort returns the process that owns the given TCP/IPv4 source port,
 // or ErrNotFound if no process owns it.
 func FindBySourcePort(port uint16) (Process, error) {
 	pid, err := findPidByPort(port)

@@ -20,7 +20,7 @@ import "fmt"
 // in libproc.h, and various codebases use values from 64 to 4096, but 1024 is likely ok.
 const ProcPathMaxsize = 1024
 
-// FindBySourcePort returns the process that owns the given TCP source port,
+// FindBySourcePort returns the process that owns the given TCP/IPv4 source port,
 // or ErrNotFound if no process owns it.
 func FindBySourcePort(port uint16) (Process, error) {
 	var pid C.pid_t
