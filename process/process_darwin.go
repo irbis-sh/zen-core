@@ -16,9 +16,9 @@ import "C"
 
 import "fmt"
 
-// ProcPathMaxsize sets the buffer length for proc_name. It's not defined
+// procPathMaxsize sets the buffer length for proc_name. It's not defined
 // in libproc.h, and various codebases use values from 64 to 4096, but 1024 is likely ok.
-const ProcPathMaxsize = 1024
+const procPathMaxsize = 1024
 
 // FindBySourcePort returns the process that owns the given TCP/IPv4 source port,
 // or ErrNotFound if no process owns it.
@@ -42,7 +42,7 @@ func FindBySourcePort(port uint16) (Process, error) {
 	}
 	p.DiskPath = C.GoString(&pathBuf[0])
 
-	var nameBuf [ProcPathMaxsize]C.char
+	var nameBuf [procPathMaxsize]C.char
 	ret = C.find_process_name_by_pid(pid, &nameBuf[0], C.size_t(len(nameBuf)))
 	if ret < 0 {
 		return Process{}, fmt.Errorf("find name for pid %d: %s", pid, C.GoString(C.strerror(-ret)))
