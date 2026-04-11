@@ -18,8 +18,8 @@ import (
 	"github.com/ZenPrivacy/zen-core/process"
 )
 
-// filterEventsEmitter emits filter events.
-type filterEventsEmitter interface {
+// filterActionObserver observes filter events.
+type filterActionObserver interface {
 	OnFilterBlock(method, url, referer string, rules []rule.Rule, process process.Process)
 	OnFilterRedirect(method, url, to, referer string, rules []rule.Rule, proc process.Process)
 	OnFilterModify(method, url, referer string, rules []rule.Rule, proc process.Process)
@@ -56,7 +56,7 @@ type Filter struct {
 	networkRules    networkRules
 	injector        documentInjector
 	filterListStore filterListStore
-	eventsEmitter   filterEventsEmitter
+	actionObserver  filterActionObserver
 	whitelistSrv    whitelistSrv
 }
 
@@ -66,9 +66,9 @@ var (
 )
 
 // NewFilter creates and initializes a new filter.
-func NewFilter(networkRules networkRules, injector documentInjector, filterListStore filterListStore, eventsEmitter filterEventsEmitter, whitelistSrv whitelistSrv) (*Filter, error) {
-	if eventsEmitter == nil {
-		return nil, errors.New("eventsEmitter is nil")
+func NewFilter(networkRules networkRules, injector documentInjector, filterListStore filterListStore, actionObserver filterActionObserver, whitelistSrv whitelistSrv) (*Filter, error) {
+	if actionObserver == nil {
+		return nil, errors.New("actionObserver is nil")
 	}
 	if networkRules == nil {
 		return nil, errors.New("networkRules is nil")
@@ -86,7 +86,7 @@ func NewFilter(networkRules networkRules, injector documentInjector, filterListS
 	f := &Filter{
 		networkRules:    networkRules,
 		injector:        injector,
-		eventsEmitter:   eventsEmitter,
+		actionObserver:  actionObserver,
 		whitelistSrv:    whitelistSrv,
 		filterListStore: filterListStore,
 	}
@@ -236,7 +236,7 @@ func (f *Filter) HandleRequest(req *http.Request, proc process.Process) (*http.R
 
 	appliedRules, shouldBlock, redirectURL := f.networkRules.ModifyReq(req)
 	if shouldBlock {
-		f.eventsEmitter.OnFilterBlock(req.Method, initialURL, req.Header.Get("Referer"), appliedRules, proc)
+		f.actionObserver.OnFilterBlock(req.Method, initialURL, req.Header.Get("Referer"), appliedRules, proc)
 
 		if isUserNavigation(req) {
 			port := f.whitelistSrv.GetPort()
@@ -255,12 +255,12 @@ func (f *Filter) HandleRequest(req *http.Request, proc process.Process) (*http.R
 	}
 
 	if redirectURL != "" {
-		f.eventsEmitter.OnFilterRedirect(req.Method, initialURL, redirectURL, req.Header.Get("Referer"), appliedRules, proc)
+		f.actionObserver.OnFilterRedirect(req.Method, initialURL, redirectURL, req.Header.Get("Referer"), appliedRules, proc)
 		return f.networkRules.CreateRedirectResponse(req, redirectURL), nil
 	}
 
 	if len(appliedRules) > 0 {
-		f.eventsEmitter.OnFilterModify(req.Method, initialURL, req.Header.Get("Referer"), appliedRules, proc)
+		f.actionObserver.OnFilterModify(req.Method, initialURL, req.Header.Get("Referer"), appliedRules, proc)
 	}
 
 	return nil, nil
@@ -292,7 +292,7 @@ func (f *Filter) HandleResponse(req *http.Request, res *http.Response, proc proc
 		return fmt.Errorf("apply network rules: %v", err)
 	}
 	if len(appliedRules) > 0 {
-		f.eventsEmitter.OnFilterModify(req.Method, req.URL.String(), req.Header.Get("Referer"), appliedRules, proc)
+		f.actionObserver.OnFilterModify(req.Method, req.URL.String(), req.Header.Get("Referer"), appliedRules, proc)
 	}
 
 	return nil
