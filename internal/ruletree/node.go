@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/internal/ruletree/byteset"
+	"github.com/irbis-sh/zen-core/internal/ruletree/byteset"
 )
 
 type litEdge[T Data] struct {

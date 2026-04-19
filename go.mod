@@ -1,4 +1,4 @@
-module github.com/ZenPrivacy/zen-core
+module github.com/irbis-sh/zen-core
 
 go 1.25.3
 

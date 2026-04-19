@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ZenPrivacy/zen-core/process"
+	"github.com/irbis-sh/zen-core/process"
 )
 
 func TestFindBySourcePort(t *testing.T) {

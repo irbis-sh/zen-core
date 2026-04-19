@@ -69,7 +69,7 @@ func TestSplitModifiers(t *testing.T) {
 			want: []string{`a\`},
 		},
 		{
-			// https://github.com/ZenPrivacy/zen-desktop/issues/509
+			// https://github.com/irbis-sh/zen-desktop/issues/509
 			in:   `removeparam=/^WT\..*$/i,thirdparty`,
 			want: []string{`removeparam=/^WT\..*$/i`, "thirdparty"},
 		},

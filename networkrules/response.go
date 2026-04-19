@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/ZenPrivacy/zen-core/networkrules/rule"
+	"github.com/irbis-sh/zen-core/networkrules/rule"
 )
 
 // CreateBlockResponse creates a response for a blocked request.

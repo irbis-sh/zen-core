@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/networkrules/rulemodifiers"
-	"github.com/ZenPrivacy/zen-core/networkrules/rulemodifiers/removejsconstant"
+	"github.com/irbis-sh/zen-core/networkrules/rulemodifiers"
+	"github.com/irbis-sh/zen-core/networkrules/rulemodifiers/removejsconstant"
 )
 
 // Rule represents modifiers of a rule.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ZenPrivacy/zen-core/internal/ruletree/byteset"
+	"github.com/irbis-sh/zen-core/internal/ruletree/byteset"
 )
 
 type Data comparable

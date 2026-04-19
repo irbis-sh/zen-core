@@ -13,9 +13,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ZenPrivacy/zen-core/internal/redacted"
-	"github.com/ZenPrivacy/zen-core/networkrules/rule"
-	"github.com/ZenPrivacy/zen-core/process"
+	"github.com/irbis-sh/zen-core/internal/redacted"
+	"github.com/irbis-sh/zen-core/networkrules/rule"
+	"github.com/irbis-sh/zen-core/process"
 )
 
 // filterActionObserver observes filter events.

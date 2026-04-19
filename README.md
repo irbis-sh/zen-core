@@ -1,7 +1,7 @@
 # zen-core
 
-![License (MIT)](https://img.shields.io/github/license/ZenPrivacy/zen-core)
-![Latest version (git tag)](https://img.shields.io/github/v/tag/ZenPrivacy/zen-core?label=version)
+![License (MIT)](https://img.shields.io/github/license/irbis-sh/zen-core)
+![Latest version (git tag)](https://img.shields.io/github/v/tag/irbis-sh/zen-core?label=version)
 <a href="https://discord.gg/zGeQVatAUm">
 <img alt="Discord" src="https://img.shields.io/discord/1334633399490711685?logo=discord&logoColor=fff&label=Discord&color=5865F2"/>
 </a>

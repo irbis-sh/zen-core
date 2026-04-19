@@ -8,13 +8,13 @@ import (
 	"net/url"
 	"strconv"
 
-	"github.com/ZenPrivacy/zen-core/csp"
-	"github.com/ZenPrivacy/zen-core/httprewrite"
-	"github.com/ZenPrivacy/zen-core/internal/asset/cosmetic"
-	"github.com/ZenPrivacy/zen-core/internal/asset/cssrule"
-	"github.com/ZenPrivacy/zen-core/internal/asset/extendedcss"
-	"github.com/ZenPrivacy/zen-core/internal/asset/jsrule"
-	"github.com/ZenPrivacy/zen-core/internal/asset/scriptlet"
+	"github.com/irbis-sh/zen-core/csp"
+	"github.com/irbis-sh/zen-core/httprewrite"
+	"github.com/irbis-sh/zen-core/internal/asset/cosmetic"
+	"github.com/irbis-sh/zen-core/internal/asset/cssrule"
+	"github.com/irbis-sh/zen-core/internal/asset/extendedcss"
+	"github.com/irbis-sh/zen-core/internal/asset/jsrule"
+	"github.com/irbis-sh/zen-core/internal/asset/scriptlet"
 )
 
 const (

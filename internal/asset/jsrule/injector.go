@@ -6,8 +6,8 @@ import (
 	"log"
 	"regexp"
 
-	"github.com/ZenPrivacy/zen-core/internal/hostmatch"
-	"github.com/ZenPrivacy/zen-core/internal/redacted"
+	"github.com/irbis-sh/zen-core/internal/hostmatch"
+	"github.com/irbis-sh/zen-core/internal/redacted"
 )
 
 type store interface {

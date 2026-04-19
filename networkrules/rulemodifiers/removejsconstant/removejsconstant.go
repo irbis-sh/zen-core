@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/httprewrite"
-	"github.com/ZenPrivacy/zen-core/networkrules/rulemodifiers"
+	"github.com/irbis-sh/zen-core/httprewrite"
+	"github.com/irbis-sh/zen-core/networkrules/rulemodifiers"
 	"golang.org/x/net/html"
 )
 
