@@ -116,7 +116,7 @@ ab.chatgpt.com
 oaiusercontent.com
 
 # Issues
-# https://github.com/ZenPrivacy/zen-desktop/pull/223
+# https://github.com/irbis-sh/zen-desktop/pull/223
 account.booking.com
-# https://github.com/ZenPrivacy/zen-desktop/issues/407
+# https://github.com/irbis-sh/zen-desktop/issues/407
 updates.ghub.logitechg.com

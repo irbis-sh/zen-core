@@ -3,7 +3,7 @@ package cosmetic
 import (
 	"regexp"
 
-	"github.com/ZenPrivacy/zen-core/internal/asset/extendedcss"
+	"github.com/irbis-sh/zen-core/internal/asset/extendedcss"
 )
 
 var (

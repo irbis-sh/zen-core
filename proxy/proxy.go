@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ZenPrivacy/zen-core/internal/redacted"
-	"github.com/ZenPrivacy/zen-core/process"
+	"github.com/irbis-sh/zen-core/internal/redacted"
+	"github.com/irbis-sh/zen-core/process"
 )
 
 // certGenerator is an interface capable of generating certificates for the proxy.

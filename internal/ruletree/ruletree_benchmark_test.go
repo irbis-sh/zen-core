@@ -36,7 +36,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/ZenPrivacy/zen-core/internal/ruletree"
+	"github.com/irbis-sh/zen-core/internal/ruletree"
 )
 
 const baseSeed = 42

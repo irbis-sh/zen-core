@@ -28,7 +28,7 @@ SOFTWARE.
 
 ## 3rd party code and assets
 
-Some code and other assets used in `zen-core` are licensed under different terms. This section attempts to attribute some of them. If you believe that your work is used in `zen-core` without proper attribution, please open an issue or contact us at [contact@zenprivacy.net](mailto:contact@zenprivacy.net).
+Some code and other assets used in `zen-core` are licensed under different terms. This section attempts to attribute some of them. If you believe that your work is used in `zen-core` without proper attribution, please open an issue or contact us at [contact@irbis.sh](mailto:contact@irbis.sh).
 
 ### mkcert
 

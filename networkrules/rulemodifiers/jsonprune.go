@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/httprewrite"
+	"github.com/irbis-sh/zen-core/httprewrite"
 	"github.com/spyzhov/ajson"
 )
 

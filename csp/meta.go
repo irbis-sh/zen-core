@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/httprewrite"
+	"github.com/irbis-sh/zen-core/httprewrite"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )

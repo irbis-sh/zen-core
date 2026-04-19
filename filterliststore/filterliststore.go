@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"time"
 
-	"github.com/ZenPrivacy/zen-core/filterliststore/diskcache"
+	"github.com/irbis-sh/zen-core/filterliststore/diskcache"
 )
 
 const defaultExpiry = 24 * time.Hour

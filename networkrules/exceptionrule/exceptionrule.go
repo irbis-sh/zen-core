@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/ZenPrivacy/zen-core/networkrules/rule"
-	"github.com/ZenPrivacy/zen-core/networkrules/rulemodifiers"
+	"github.com/irbis-sh/zen-core/networkrules/rule"
+	"github.com/irbis-sh/zen-core/networkrules/rulemodifiers"
 )
 
 type ExceptionRule struct {

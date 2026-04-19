@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/ZenPrivacy/zen-core/httprewrite"
+	"github.com/irbis-sh/zen-core/httprewrite"
 )
 
 func TestAppendHTMLHeadContentsPublic(t *testing.T) {
