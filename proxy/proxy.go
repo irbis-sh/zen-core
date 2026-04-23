@@ -138,6 +138,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	pid, err := findRequestProcess(r)
 	if err != nil {
 		log.Printf("error finding request process: %v", err)
+		pid = 0 // Defensively set to avoid potentially bogus PIDs
 	}
 
 	if r.Method == http.MethodConnect {
