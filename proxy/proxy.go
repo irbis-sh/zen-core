@@ -17,8 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/irbis-sh/process"
 	"github.com/irbis-sh/zen-core/internal/redacted"
-	"github.com/irbis-sh/zen-core/process"
 )
 
 // certGenerator is an interface capable of generating certificates for the proxy.
@@ -28,8 +28,8 @@ type certGenerator interface {
 
 // filter is an interface capable of filtering HTTP requests.
 type filter interface {
-	HandleRequest(*http.Request, process.Process) (*http.Response, error)
-	HandleResponse(*http.Request, *http.Response, process.Process) error
+	HandleRequest(*http.Request, process.PID) (*http.Response, error)
+	HandleResponse(*http.Request, *http.Response, process.PID) error
 }
 
 // Proxy is a forward HTTP/HTTPS proxy that can filter requests.
@@ -135,21 +135,21 @@ func (p *Proxy) shutdownServer() error {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	proc, err := findRequestProcess(r)
+	pid, err := findRequestProcess(r)
 	if err != nil {
 		log.Printf("error finding request process: %v", err)
 	}
 
 	if r.Method == http.MethodConnect {
-		p.proxyConnect(w, r, proc)
+		p.proxyConnect(w, r, pid)
 	} else {
-		p.proxyHTTP(w, r, proc)
+		p.proxyHTTP(w, r, pid)
 	}
 }
 
 // proxyHTTP proxies the HTTP request to the remote server.
-func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, proc process.Process) {
-	filterResp, err := p.filter.HandleRequest(r, proc)
+func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, pid process.PID) {
+	filterResp, err := p.filter.HandleRequest(r, pid)
 	if err != nil {
 		log.Printf("error handling request for %q: %v", redacted.Redacted(r.URL), err)
 	}
@@ -219,7 +219,7 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, proc process.P
 
 	removeHopHeaders(resp.Header)
 
-	if err := p.filter.HandleResponse(r, resp, proc); err != nil {
+	if err := p.filter.HandleResponse(r, resp, pid); err != nil {
 		log.Printf("error handling response by filter: %v", err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -230,7 +230,7 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, proc process.P
 
 // proxyConnect proxies the initial CONNECT and subsequent data between the
 // client and the remote server.
-func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request, proc process.Process) {
+func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request, pid process.PID) {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		log.Fatal("http server does not support hijacking")
@@ -291,7 +291,7 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request, proc 
 	ln := newSingleConnListener(tlsConn)
 
 	srv := &http.Server{
-		Handler:   p.connectHandler(connReq, host, ln, proc),
+		Handler:   p.connectHandler(connReq, host, ln, pid),
 		TLSConfig: tlsConfig,
 		ConnState: func(_ net.Conn, state http.ConnState) {
 			if state == http.StateClosed {
@@ -307,7 +307,7 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request, proc 
 }
 
 // connectHandler returns an http.Handler that processes requests on a CONNECT-tunnelled TLS connection.
-func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleConnListener, proc process.Process) http.Handler {
+func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleConnListener, pid process.PID) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		req.URL.Host = connReq.Host
 		req.URL.Scheme = "https"
@@ -336,7 +336,7 @@ func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleCon
 			req.Header.Set("User-Agent", "")
 		}
 
-		filterResp, err := p.filter.HandleRequest(req, proc)
+		filterResp, err := p.filter.HandleRequest(req, pid)
 		if err != nil {
 			log.Printf("handling request for %q: %v", redacted.Redacted(req.URL), err)
 		}
@@ -396,7 +396,7 @@ func (p *Proxy) connectHandler(connReq *http.Request, host string, ln *singleCon
 
 		removeHopHeaders(resp.Header)
 
-		if err := p.filter.HandleResponse(req, resp, proc); err != nil {
+		if err := p.filter.HandleResponse(req, resp, pid); err != nil {
 			log.Printf("error handling response by filter for %q: %v", redacted.Redacted(req.URL), err)
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
@@ -610,15 +610,15 @@ func removeHopHeaders(header http.Header) {
 	}
 }
 
-func findRequestProcess(r *http.Request) (process.Process, error) {
+func findRequestProcess(r *http.Request) (process.PID, error) {
 	_, sourcePort, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return process.Process{}, fmt.Errorf("parse RemoteAddr: %v", err)
+		return 0, fmt.Errorf("parse RemoteAddr: %v", err)
 	}
 	sourcePortNum, err := strconv.ParseUint(sourcePort, 10, 16)
 	if err != nil {
-		return process.Process{}, fmt.Errorf("parse source port: %v", err)
+		return 0, fmt.Errorf("parse source port: %v", err)
 	}
 
-	return process.FindBySourcePort(uint16(sourcePortNum))
+	return process.FindPIDBySourcePort(uint16(sourcePortNum))
 }
