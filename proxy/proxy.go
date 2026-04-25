@@ -12,7 +12,6 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/textproto"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -135,7 +134,7 @@ func (p *Proxy) shutdownServer() error {
 }
 
 func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	pid, err := findRequestProcess(r)
+	pid, err := process.FindPIDByRequest(r)
 	if err != nil {
 		log.Printf("error finding request process: %v", err)
 		pid = 0 // Defensively set to avoid potentially bogus PIDs
@@ -609,17 +608,4 @@ func removeHopHeaders(header http.Header) {
 	for _, h := range hopHeaders {
 		header.Del(h)
 	}
-}
-
-func findRequestProcess(r *http.Request) (process.PID, error) {
-	_, sourcePort, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return 0, fmt.Errorf("parse RemoteAddr: %v", err)
-	}
-	sourcePortNum, err := strconv.ParseUint(sourcePort, 10, 16)
-	if err != nil {
-		return 0, fmt.Errorf("parse source port: %v", err)
-	}
-
-	return process.FindPIDBySourcePort(uint16(sourcePortNum))
 }
