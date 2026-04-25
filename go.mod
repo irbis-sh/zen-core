@@ -7,7 +7,7 @@ require (
 	github.com/getlantern/elevate v0.0.0-20220903142053-479ab992b264
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hectane/go-acl v0.0.0-20230122075934-ca0b05cb1adb
-	github.com/irbis-sh/process v0.2.0
+	github.com/irbis-sh/process v0.3.0
 	github.com/klauspost/compress v1.18.0
 	github.com/spyzhov/ajson v0.9.6
 	github.com/tdewolff/parse/v2 v2.8.4
