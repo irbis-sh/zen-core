@@ -31,6 +31,10 @@ type filter interface {
 	HandleResponse(*http.Request, *http.Response, process.PID) error
 }
 
+// ShouldProxyFunc should report whether requests from processPath should be handled by the proxy.
+// Returning false makes the proxy tunnel/forward traffic without filtering or MITM.
+type ShouldProxyFunc func(processPath string) bool
+
 // Proxy is a forward HTTP/HTTPS proxy that can filter requests.
 type Proxy struct {
 	filter             filter
@@ -40,11 +44,12 @@ type Proxy struct {
 	requestTransport   http.RoundTripper
 	requestClient      *http.Client
 	netDialer          *net.Dialer
+	shouldProxy        ShouldProxyFunc
 	transparentHosts   []string
 	transparentHostsMu sync.RWMutex
 }
 
-func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, error) {
+func NewProxy(filter filter, certGenerator certGenerator, port int, shouldProxy ShouldProxyFunc) (*Proxy, error) {
 	if filter == nil {
 		return nil, errors.New("filter is nil")
 	}
@@ -56,6 +61,7 @@ func NewProxy(filter filter, certGenerator certGenerator, port int) (*Proxy, err
 		filter:        filter,
 		certGenerator: certGenerator,
 		port:          port,
+		shouldProxy:   shouldProxy,
 	}
 
 	p.netDialer = &net.Dialer{
@@ -140,23 +146,34 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		pid = 0 // Defensively set to avoid potentially bogus PIDs
 	}
 
+	shouldProxy := true
+	if p.shouldProxy != nil && pid != 0 {
+		processPath, err := pid.ExecutablePath()
+		if err != nil {
+			log.Printf("error finding request process path: %v", err)
+		}
+		shouldProxy = p.shouldProxy(processPath)
+	}
+
 	if r.Method == http.MethodConnect {
-		p.proxyConnect(w, r, pid)
+		p.proxyConnect(w, r, pid, shouldProxy)
 	} else {
-		p.proxyHTTP(w, r, pid)
+		p.proxyHTTP(w, r, pid, shouldProxy)
 	}
 }
 
 // proxyHTTP proxies the HTTP request to the remote server.
-func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, pid process.PID) {
-	filterResp, err := p.filter.HandleRequest(r, pid)
-	if err != nil {
-		log.Printf("error handling request for %q: %v", redacted.Redacted(r.URL), err)
-	}
+func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, pid process.PID, shouldProxy bool) {
+	if shouldProxy {
+		filterResp, err := p.filter.HandleRequest(r, pid)
+		if err != nil {
+			log.Printf("error handling request for %q: %v", redacted.Redacted(r.URL), err)
+		}
 
-	if filterResp != nil {
-		filterResp.Write(w)
-		return
+		if filterResp != nil {
+			filterResp.Write(w)
+			return
+		}
 	}
 
 	if isWS(r) {
@@ -219,10 +236,12 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, pid process.PI
 
 	removeHopHeaders(resp.Header)
 
-	if err := p.filter.HandleResponse(r, resp, pid); err != nil {
-		log.Printf("error handling response by filter: %v", err)
-		http.Error(w, err.Error(), http.StatusBadGateway)
-		return
+	if shouldProxy {
+		if err := p.filter.HandleResponse(r, resp, pid); err != nil {
+			log.Printf("error handling response by filter: %v", err)
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
 	}
 
 	writeResp(w, resp)
@@ -230,7 +249,7 @@ func (p *Proxy) proxyHTTP(w http.ResponseWriter, r *http.Request, pid process.PI
 
 // proxyConnect proxies the initial CONNECT and subsequent data between the
 // client and the remote server.
-func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request, pid process.PID) {
+func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request, pid process.PID, shouldProxy bool) {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		log.Fatal("http server does not support hijacking")
@@ -246,6 +265,11 @@ func (p *Proxy) proxyConnect(w http.ResponseWriter, connReq *http.Request, pid p
 	host, _, err := net.SplitHostPort(connReq.Host)
 	if err != nil {
 		log.Printf("splitting host and port(%s): %v", redacted.Redacted(connReq.Host), err)
+		return
+	}
+
+	if !shouldProxy {
+		p.tunnel(clientConn, connReq)
 		return
 	}
 
